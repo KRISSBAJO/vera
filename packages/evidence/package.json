@@ -1,0 +1,31 @@
+{
+  "name": "@vera/evidence",
+  "version": "0.1.0",
+  "description": "Evidence providers (the Proof engine interface): facts VERA fetches with its own credentials. GitHub PR approval, checks, and migration detection.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vera/schemas": "workspace:*",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

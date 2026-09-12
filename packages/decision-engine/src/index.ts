@@ -30,6 +30,8 @@ export interface DecideInput {
   policySetVersion: string;
   /** Evidence VERA fetched or computed itself. Request evidence is always asserted (SR-01). */
   verifiedEvidence: readonly Evidence[];
+  /** Providers that applied but did not answer in budget (EVIDENCE.MISSING; absence is never safe). */
+  missingEvidence?: readonly { provider: string; reason: string }[];
   keyOwner: { id: string; kind: 'user' | 'service' };
   now: Date;
 }
@@ -83,6 +85,8 @@ export function decide(input: DecideInput): DecideOutput {
       severity: 'info',
       detail: `${asserted.length} runtime-asserted item(s); cannot satisfy prerequisites`,
     });
+  for (const m of input.missingEvidence ?? [])
+    codes.push({ code: 'EVIDENCE.MISSING', severity: 'medium', detail: `${m.provider}: ${m.reason}` });
 
   // --- action analysis ---
   const command = typeof args.command === 'string' ? args.command : undefined;

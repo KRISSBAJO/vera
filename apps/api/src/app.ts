@@ -4,6 +4,7 @@ import { actionHash } from '@vera/canon';
 import { appendAudit, newId, schema, type Tx, type VeraDb } from '@vera/db';
 import { decide, type TenantConfig } from '@vera/decision-engine';
 import { verifyDecisionToken } from '@vera/decision-token';
+import { type EvidenceProvider, gatherEvidence } from '@vera/evidence';
 import {
   DecideRequestSchema,
   type DecideResponse,
@@ -48,6 +49,9 @@ const {
 export interface AppDeps extends ServiceContext {
   vera: VeraDb;
   logger?: boolean;
+  /** Evidence providers (Proof engine). Each runs under `evidenceBudgetMs`; late ones are EVIDENCE.MISSING. */
+  evidenceProviders?: EvidenceProvider[];
+  evidenceBudgetMs?: number;
 }
 
 const ErrorSchema = z.object({
@@ -216,12 +220,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         });
         await tx.update(apiKeys).set({ lastUsedAt: now }).where(eq(apiKeys.id, key.keyId));
 
+        // Proof: facts fetched with VERA's own credentials, gathered before the row is written so the
+        // stored decision is reproducible from what was known at the time.
+        const gathered = await gatherEvidence(deps.evidenceProviders ?? [], body, {
+          budgetMs: deps.evidenceBudgetMs ?? 1500,
+        });
+
         const out = decide({
           request: body,
           tenant,
           policySet: ps.compiled,
           policySetVersion: ps.version,
-          verifiedEvidence: [], // evidence providers (GitHub) land in the next step of the slice
+          verifiedEvidence: gathered.evidence,
+          missingEvidence: gathered.missing,
           keyOwner: { id: key.ownerUserId, kind: key.ownerKind },
           now,
         });
