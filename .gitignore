@@ -7,3 +7,5 @@ coverage/
 .env.*
 !.env.example
 .preview/
+.claude/settings.local.json
+.vera/

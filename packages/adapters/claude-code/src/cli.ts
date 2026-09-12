@@ -140,8 +140,11 @@ switch (command) {
         'acting-for': { type: 'string' },
         environment: { type: 'string' },
         settings: { type: 'string' },
+        /** How Claude Code should invoke this hook; defaults to `vera-hook` on PATH. */
+        command: { type: 'string' },
       },
     });
+    const hookCommand = values.command ?? 'vera-hook';
     const cfg = AdapterConfigSchema.parse({
       endpoint: values.endpoint,
       apiKey: values['api-key'],
@@ -153,11 +156,11 @@ switch (command) {
     const path = saveConfig(cfg);
     console.log(`wrote ${path}`);
     if (values.settings) {
-      mergeHooksInto(values.settings);
-      console.log(`merged hooks into ${values.settings}`);
+      mergeHooksInto(values.settings, hookCommand);
+      console.log(`merged hooks into ${values.settings} (command: ${hookCommand})`);
     } else {
       console.log(
-        `\nAdd to your Claude Code settings.json (or rerun with --settings <path>):\n${JSON.stringify(hooksSettings(), null, 2)}`,
+        `\nAdd to your Claude Code settings.json (or rerun with --settings <path>):\n${JSON.stringify(hooksSettings(hookCommand), null, 2)}`,
       );
     }
     break;

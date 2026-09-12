@@ -24,6 +24,22 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `packages/db` | Postgres schema (Drizzle) + migrations with FORCE row-level security, tenant-scoped client, hash-chained append-only audit, key sealing. |
 | `packages/decision-engine` | Request + policy set + evidence → verdict, reason codes, risk score, review routing with SoD, expiry. |
 | `apps/api` | Fastify: `/v1/decide`, `/v1/decisions/:id` (+ approve / reject / outcome), `/v1/tokens/consume`, `/v1/audit-events`, tenant JWKS, `/openapi.json`. CLI: `migrate`, `bootstrap`, `add-user`, `serve`. |
+| `packages/adapters/claude-code` | `vera-hook`: the Claude Code command hook (ADR-0002). `pre` asks VERA and verifies tokens; `post` recomputes the hash and reports outcomes; `init` writes config and hooks; `status`. Apache-2.0. |
+
+## Put it in front of Claude Code
+
+```bash
+corepack pnpm --filter @vera/api cli bootstrap --org "LogaXP" --email you@example.com --aud adapter:my-laptop
+node packages/adapters/claude-code/dist/cli.js init \
+  --endpoint http://localhost:4000 --api-key vera_sk_… --org org_… --aud adapter:my-laptop \
+  --acting-for you@example.com --settings .claude/settings.local.json
+```
+
+Restart Claude Code in that project; hooks are loaded at session start. Approve or reject a REVIEW with the reviewer session token:
+
+```bash
+curl -X POST http://localhost:4000/v1/decisions/dec_…/approve -H "Authorization: Bearer vera_rs_…" -H "content-type: application/json" -d '{"rationale":"checked"}'
+```
 
 ## Run it locally
 
