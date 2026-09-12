@@ -59,7 +59,7 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 
 1. Threat model + boundary restatement + assumptions — done (v2.1 of the brief applies its fixes)
 2. Contracts: schemas, canonicalization, decision token — done (62 tests)
-3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **server side done** (Cedar spike, database with RLS, decision engine, API with end-to-end tests). Remaining: GitHub evidence provider, `vera-hook` adapter, dogfood.
+3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
 4. Baselines, outcomes, second adapter
 5. Hardening, dashboard v0
 6. Design-partner packaging
