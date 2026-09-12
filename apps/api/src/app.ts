@@ -6,6 +6,7 @@ import { appendAudit, newId, schema, seal, type Tx, unseal, type VeraDb } from '
 import { decide, type TenantConfig } from '@vera/decision-engine';
 import { verifyDecisionToken } from '@vera/decision-token';
 import { type EvidenceProvider, gatherEvidence } from '@vera/evidence';
+import type { Notifier, ReviewNotification } from '@vera/notify-slack';
 import { redact, rulesFor, tenantRules } from '@vera/redaction';
 import {
   AdapterConfigSchema,
@@ -68,11 +69,31 @@ export interface AppDeps extends ServiceContext {
   evidenceBudgetMs?: number;
   /** How stale a baseline rollup may get before the next outcome rebuilds it. */
   baselineSnapshotMaxAgeMs?: number;
+  /** Optional Slack review notifications (ADR-0006). Absent means no notifications, not an error. */
+  notifier?: Notifier;
 }
 
 const ErrorSchema = z.object({
   error: z.object({ code: z.string(), message: z.string(), details: z.unknown().optional() }),
 });
+
+/**
+ * A one-line rendering of (already redacted) tool arguments for a notification.
+ *
+ * `command` first because that is the whole action for shell tools and the only thing a reviewer
+ * needs to recognise it. Everything here is agent-supplied and treated as hostile downstream.
+ */
+function summarizeArguments(args: unknown): string {
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    const record = args as Record<string, unknown>;
+    if (typeof record.command === 'string') return record.command;
+    const parts = Object.entries(record).map(
+      ([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`,
+    );
+    if (parts.length > 0) return parts.join(' ');
+  }
+  return typeof args === 'string' ? args : JSON.stringify(args ?? null);
+}
 
 /**
  * A refusal that must leave an audit event even though the transaction it happened in rolls back
@@ -162,7 +183,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         .update(canonicalize(body) ?? '', 'utf8')
         .digest('hex');
 
-      return withTenantAudited(key.orgId, async (tx) => {
+      /** Captured inside the transaction, sent only after it commits. See below. */
+      let pendingNotification: ReviewNotification | null = null;
+
+      const decided = await withTenantAudited(key.orgId, async (tx) => {
         // SR-13: same idempotency key ⇒ same decision; different body ⇒ 409.
         const [existing] = await tx
           .select({ id: actionRequests.id, bodyHash: actionRequests.bodyHash })
@@ -332,6 +356,24 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             expiresAt: out.expiresAt,
           });
           reviewUrl = `${deps.publicUrl}/r/${decisionId}`;
+          pendingNotification = {
+            decisionId,
+            url: reviewUrl,
+            actionClass: body.action.class,
+            tool: body.action.tool,
+            // The redacted arguments, never the raw ones (SR-15).
+            summary: summarizeArguments(redactedAction.value.arguments),
+            // Say "unspecified" rather than leave it blank: a reviewer should notice that the agent
+            // did not declare an environment, not read the gap as "not production".
+            environment: body.action.environment ?? 'unspecified',
+            target: body.target ? `${body.target.kind}:${body.target.id}` : '(none)',
+            actor: body.actor.id,
+            actingFor: body.acting_for?.id,
+            reasonCodes: out.reasonCodes.map((c) => c.code),
+            routedTo: out.review.routed_to,
+            expiresAt: out.expiresAt,
+            redactedCount: redactedAction.findings.length,
+          };
         }
 
         await appendAudit(tx, key.orgId, 'decision.issued', `key:${key.keyId}`, {
@@ -375,6 +417,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         if (violations.length > 0) throw new HttpError(500, 'INVARIANT_VIOLATION', violations.join('; '));
         return response;
       });
+
+      // Only now, after the transaction has committed. Notifying from inside it would announce
+      // decisions that then rolled back — and would put a network call to Slack on the path of a
+      // held database transaction. Slack is a side channel: a failure here is logged and dropped,
+      // never surfaced to the agent, because a reviewer who missed a notification can still find the
+      // decision, whereas an agent that got a 500 has lost a verdict VERA already recorded.
+      if (pendingNotification && deps.notifier) {
+        const n: ReviewNotification = pendingNotification;
+        void deps.notifier
+          .notifyReview(n)
+          .then((r) => {
+            if (!r.ok)
+              app.log.warn({ decision_id: n.decisionId, error: r.error }, 'slack notification failed');
+          })
+          .catch((err) => app.log.warn({ decision_id: n.decisionId, err }, 'slack notification threw'));
+      }
+      return decided;
     },
   );
 

@@ -50,6 +50,9 @@ importers:
       '@vera/evidence':
         specifier: workspace:*
         version: link:../../packages/evidence
+      '@vera/notify-slack':
+        specifier: workspace:*
+        version: link:../../packages/notify-slack
       '@vera/policy-engine':
         specifier: workspace:*
         version: link:../../packages/policy-engine
@@ -321,6 +324,18 @@ importers:
       jose:
         specifier: ^6.2.12
         version: 6.2.12
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.2
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@types/node@22.20.2)(vite@8.3.0(@types/node@22.20.2)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
+
+  packages/notify-slack:
     devDependencies:
       '@types/node':
         specifier: ^22

@@ -31,6 +31,7 @@
     "@vera/decision-engine": "workspace:*",
     "@vera/decision-token": "workspace:*",
     "@vera/evidence": "workspace:*",
+    "@vera/notify-slack": "workspace:*",
     "@vera/policy-engine": "workspace:*",
     "@vera/redaction": "workspace:*",
     "@vera/schemas": "workspace:*",

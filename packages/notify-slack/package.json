@@ -1,0 +1,16 @@
+{
+  "name": "@vera/notify-slack",
+  "version": "0.1.0",
+  "description": "Tells a reviewer in Slack that a decision is waiting, and links them to it. Notifications only — the approval happens in the dashboard (ADR-0006).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": { "@types/node": "^22", "typescript": "^7.0.2", "vitest": "^5.0.0" }
+}

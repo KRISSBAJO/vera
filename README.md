@@ -10,7 +10,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `docs/competitive-scan-2026-09.md` | Landscape scan behind the brief's §2 — ~75 sources. |
 | `docs/threat-model.md` | Build deliverable 1: trust boundaries, threats T01–T25, security requirements SR-01–SR-22, accepted risks, open questions. |
 | `docs/boundary-and-assumptions.md` | Build deliverable 1: the product boundary restated, and 17 unsafe or ambiguous assumptions found in the brief with resolutions. |
-| `docs/decisions/` | Architecture decision records: 0001 tech stack, 0002 Claude Code adapter shape, 0003 per-user keys, 0004 Cedar closed records, 0005 key custody. |
+| `docs/decisions/` | Architecture decision records: 0001 tech stack, 0002 Claude Code adapter shape, 0003 per-user keys, 0004 Cedar closed records, 0005 key custody, 0006 Slack notifications not approvals. |
 | `docs/word/` | Word exports of the above, generated from the markdown — never edited by hand. |
 
 ## Code
@@ -31,6 +31,8 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `apps/dashboard` | The review queue (Next.js): triage list, decision detail with quarantined agent text, approve/reject with rationale, audited reveal of redacted values. |
 | `packages/redaction` | Masks credentials in tool arguments before storage, display, or any model call (SR-15). |
 | `packages/adapters/openai-agents` | `createVeraGuard()` for the OpenAI Agents SDK: `protect(tool, spec)` enforces (decide → verify token → run), `needsApproval()` feeds the SDK's own interruption flow. Apache-2.0. |
+| `packages/signer-kms` | `Signer` backed by AWS KMS: the private key never reaches the process, and no export path exists (ADR-0005). Depended on only by the API. |
+| `packages/notify-slack` | Tells a reviewer in Slack that a decision is waiting and links them to it. Cannot approve anything, by construction (ADR-0006). |
 
 ## Put it in front of Claude Code
 
@@ -67,7 +69,7 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 2. Contracts: schemas, canonicalization, decision token — done (62 tests)
 3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
 4. Baselines, outcomes, second adapter — **done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`, `packages/adapters/openai-agents`; 235 tests).
-5. Hardening, dashboard v0 — **redaction, the review queue, key rotation/revocation, and tenant-signed class tables done**. Remaining: the KMS signer (ADR-0005 — custody is development-grade until it lands) and Slack notifications, both blocked on credentials.
-6. Design-partner packaging
+5. Hardening, dashboard v0 — **done** (redaction, the review queue, key rotation/revocation, tenant-signed class tables, the KMS signer per ADR-0005, and Slack review notifications per ADR-0006; 359 tests). Two things await credentials rather than code: the KMS path has not been run against a live key (`apps/api/scripts/kms-smoke.mjs`), and the Slack app needs its bot token installed.
+6. Design-partner packaging — in progress
 
 Days 1–10 also run the validation interviews (brief Appendix A); the day-10 gate decides whether Policy Pack 1 stays on coding agents.
