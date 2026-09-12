@@ -1,0 +1,1 @@
+ALTER TABLE "decision_tokens" ADD COLUMN "token_sealed" text;

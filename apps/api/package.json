@@ -1,0 +1,38 @@
+{
+  "name": "@vera/api",
+  "version": "0.1.0",
+  "description": "VERA decision API: /v1/decide, review approve/reject, JWKS, token consumption, outcomes, audit",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "vera-api": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "tsx watch src/server.ts",
+    "cli": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@fastify/swagger": "^9.8.1",
+    "@vera/canon": "workspace:*",
+    "@vera/db": "workspace:*",
+    "@vera/decision-engine": "workspace:*",
+    "@vera/decision-token": "workspace:*",
+    "@vera/policy-engine": "workspace:*",
+    "@vera/schemas": "workspace:*",
+    "canonicalize": "^5.0.0",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.12.4",
+    "fastify-type-provider-zod": "^7.0.0",
+    "jose": "^6.2.12",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

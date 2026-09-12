@@ -263,6 +263,8 @@ export const decisionTokens = pgTable(
       .references(() => decisions.id),
     aud: text('aud').notNull(),
     actionHash: text('action_hash').notNull(),
+    /** The token itself, sealed under the master key, so the receiver can collect it by polling. Never logged. */
+    tokenSealed: text('token_sealed'),
     expiresAt: ts('expires_at').notNull(),
     consumedAt: ts('consumed_at'),
     createdAt: createdAt(),

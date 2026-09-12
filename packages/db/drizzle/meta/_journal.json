@@ -15,6 +15,13 @@
       "when": 1789174695330,
       "tag": "0001_rls_and_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789175354134,
+      "tag": "0002_token_sealed",
+      "breakpoints": true
     }
   ]
 }

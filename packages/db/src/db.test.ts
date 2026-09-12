@@ -77,16 +77,14 @@ describe('SR-14 tenant isolation', () => {
   it('auth lookup can find a key by hash without a tenant, but cannot write', async () => {
     const { secret, hash, display } = newSecret('vera_sk');
     await vera.withTenant(orgA, (tx) =>
-      tx
-        .insert(apiKeys)
-        .values({
-          id: newId('key'),
-          orgId: orgA,
-          ownerUserId: userA,
-          keyHash: hash,
-          prefix: display,
-          receiverAud: 'adapter:test',
-        }),
+      tx.insert(apiKeys).values({
+        id: newId('key'),
+        orgId: orgA,
+        ownerUserId: userA,
+        keyHash: hash,
+        prefix: display,
+        receiverAud: 'adapter:test',
+      }),
     );
     const found = await vera.withAuthLookup((tx) =>
       tx
@@ -97,16 +95,14 @@ describe('SR-14 tenant isolation', () => {
     expect(found).toEqual([{ orgId: orgA }]);
     await rejectsWith(
       vera.withAuthLookup((tx) =>
-        tx
-          .insert(apiKeys)
-          .values({
-            id: newId('key'),
-            orgId: orgA,
-            ownerUserId: userA,
-            keyHash: 'x',
-            prefix: 'x',
-            receiverAud: 'x',
-          }),
+        tx.insert(apiKeys).values({
+          id: newId('key'),
+          orgId: orgA,
+          ownerUserId: userA,
+          keyHash: 'x',
+          prefix: 'x',
+          receiverAud: 'x',
+        }),
       ),
       /row-level security/,
     );
@@ -115,16 +111,14 @@ describe('SR-14 tenant isolation', () => {
   it('SR-13 idempotency keys are unique per tenant', async () => {
     const keyId = newId('key');
     await vera.withTenant(orgA, (tx) =>
-      tx
-        .insert(apiKeys)
-        .values({
-          id: keyId,
-          orgId: orgA,
-          ownerUserId: userA,
-          keyHash: newSecret('vera_sk').hash,
-          prefix: 'x',
-          receiverAud: 'x',
-        }),
+      tx.insert(apiKeys).values({
+        id: keyId,
+        orgId: orgA,
+        ownerUserId: userA,
+        keyHash: newSecret('vera_sk').hash,
+        prefix: 'x',
+        receiverAud: 'x',
+      }),
     );
     const row = {
       orgId: orgA,
@@ -144,16 +138,14 @@ describe('SR-14 tenant isolation', () => {
     // Same key in another tenant is fine.
     await vera.withTenant(orgB, async (tx) => {
       const keyB = newId('key');
-      await tx
-        .insert(apiKeys)
-        .values({
-          id: keyB,
-          orgId: orgB,
-          ownerUserId: userB,
-          keyHash: newSecret('vera_sk').hash,
-          prefix: 'x',
-          receiverAud: 'x',
-        });
+      await tx.insert(apiKeys).values({
+        id: keyB,
+        orgId: orgB,
+        ownerUserId: userB,
+        keyHash: newSecret('vera_sk').hash,
+        prefix: 'x',
+        receiverAud: 'x',
+      });
       await tx.insert(actionRequests).values({ ...row, id: newId('req'), orgId: orgB, apiKeyId: keyB });
     });
   });
@@ -184,17 +176,15 @@ describe('SR-16 audit chain', () => {
   it('detects a forged link (wrong prev_hash) at the exact sequence number', async () => {
     await vera.withTenant(orgB, async (tx) => {
       await appendAudit(tx, orgB, 'ok', 'system', {});
-      await tx
-        .insert(auditEvents)
-        .values({
-          orgId: orgB,
-          seq: 2,
-          kind: 'forged',
-          actor: 'x',
-          payload: {},
-          prevHash: 'not-the-real-one',
-          hash: 'whatever',
-        });
+      await tx.insert(auditEvents).values({
+        orgId: orgB,
+        seq: 2,
+        kind: 'forged',
+        actor: 'x',
+        payload: {},
+        prevHash: 'not-the-real-one',
+        hash: 'whatever',
+      });
     });
     const v = await vera.withTenant(orgB, (tx) => verifyChain(tx, orgB));
     expect(v).toMatchObject({ ok: false, brokenAt: 2 });
