@@ -16,12 +16,12 @@
     --hairline-2: #d3d3cd;
     --ink: #0a0a0b;
     --ink-2: #3f424a;
-    --dim: #7d8089;
-    --faint: #a8aab1;
+    --dim: #5a5d65;
+    --faint: #64676f;
 
     --allow: #0b7a4b;
     --allow-wash: #edf7f1;
-    --review: #a86a05;
+    --review: #8a5803;
     --review-wash: #fdf5e8;
     --block: #c1322e;
     --block-wash: #fdf0ef;
@@ -51,8 +51,8 @@
       --hairline-2: #33363e;
       --ink: #f2f3f5;
       --ink-2: #b9bdc6;
-      --dim: #878b95;
-      --faint: #5f636d;
+      --dim: #9aa0aa;
+      --faint: #858995;
 
       --allow: #3fc487;
       --allow-wash: #10261c;
@@ -79,8 +79,8 @@
     --hairline-2: #33363e;
     --ink: #f2f3f5;
     --ink-2: #b9bdc6;
-    --dim: #878b95;
-    --faint: #5f636d;
+    --dim: #9aa0aa;
+    --faint: #858995;
     --allow: #3fc487;
     --allow-wash: #10261c;
     --review: #e5ab46;
@@ -206,7 +206,9 @@
   .masthead nav { margin-left: auto; display: flex; align-items: center; gap: 1.6rem; }
   .masthead nav a.lnk {
     font-size: 0.875rem;
-    color: var(--dim);
+    /* --dim is the quiet tier for supporting prose; at 14px on paper it lands at 3.2:1, under the
+       4.5 that small text needs. Navigation has to be readable, not decorative. */
+    color: var(--ink-2);
     text-decoration: none;
     transition: color 0.15s;
   }
@@ -244,7 +246,7 @@
   :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
 
   /* ── Hero ─────────────────────────────────────────────────────────────────────────────────── */
-  .hero { position: relative; padding-block: clamp(3.5rem, 8vw, 7rem) clamp(2rem, 4vw, 3rem); }
+  .hero { position: relative; padding-block: clamp(2.5rem, 5vw, 4rem) clamp(2rem, 4vw, 3rem); }
   .hero::before {
     /* Engineering paper: a fine grid that fades out. Depth without decoration. */
     content: '';
@@ -261,13 +263,13 @@
     opacity: 0.75;
   }
 
-  .hero__badge { display: inline-flex; margin-bottom: 1.6rem; }
+  .hero__badge { display: inline-flex; margin-bottom: 1.35rem; }
   .hero h1 {
     font-variation-settings: 'wdth' 108;
     font-weight: 800;
-    font-size: clamp(2.7rem, 7.4vw, 5.75rem);
+    font-size: clamp(2.6rem, 6.1vw, 4.9rem);
     max-width: 15ch;
-    margin-bottom: 1.6rem;
+    margin-bottom: 1.35rem;
   }
   .hero h1 .quiet {
     display: block;
@@ -281,7 +283,7 @@
     line-height: 1.55;
     color: var(--ink-2);
     max-width: 54ch;
-    margin-bottom: 2.2rem;
+    margin-bottom: 1.85rem;
     font-weight: 350;
   }
   .hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
@@ -289,7 +291,7 @@
 
   /* ── The instrument ───────────────────────────────────────────────────────────────────────── */
   .instrument {
-    margin-top: clamp(2.75rem, 6vw, 4.5rem);
+    margin-top: clamp(2rem, 3.6vw, 3rem);
     background: var(--surface);
     border: 1px solid var(--hairline);
     border-radius: 16px;
@@ -731,7 +733,8 @@
   footer.foot { border-top: 1px solid var(--hairline); padding-block: 2.25rem 3.5rem; }
   .foot .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; color: var(--faint); font-size: 0.875rem; }
   .foot .spacer { margin-left: auto; }
-  .foot a { text-decoration: none; color: var(--dim); }
+  .foot a { text-decoration: none; color: var(--ink-2); }
+  .foot .mark { color: var(--ink-2); }
   .foot a:hover { color: var(--ink); }
 </style>
 
