@@ -1,0 +1,541 @@
+/*
+ * An operator's tool, not a marketing page: dense, scannable, and honest about uncertainty.
+ *
+ * Two rules the design has to carry, because they are security properties rather than taste:
+ *   1. Severity and trust are encoded in FORM (a stripe, a label, a border) as well as colour, so a
+ *      colour-blind reviewer — or one glancing at a laptop in daylight — reads the same thing.
+ *   2. Anything an agent wrote is visually quarantined. It must never be able to borrow VERA's own
+ *      styling and look like a verdict (threat T04).
+ */
+
+:root {
+  --ink: #16191d;
+  --ink-2: #474d57;
+  --ink-3: #6b7280;
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --surface-2: #f0f1ef;
+  --line: #dfe0dc;
+  --line-strong: #c3c5bf;
+  --accent: #1f4f82;
+  --accent-soft: #e8eff7;
+
+  --high: #9b2c2c;
+  --high-bg: #fbeaea;
+  --medium: #8a5a00;
+  --medium-bg: #fdf3e0;
+  --low: #3f5b73;
+  --low-bg: #ecf1f5;
+  --info: #6b7280;
+  --info-bg: #f1f2f0;
+
+  --verified: #1f6b45;
+  --verified-bg: #e7f3ec;
+  --asserted: #8a5a00;
+  --asserted-bg: #fdf3e0;
+
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8e9e6;
+    --ink-2: #b3b7bd;
+    --ink-3: #8b9099;
+    --bg: #14161a;
+    --surface: #1b1e23;
+    --surface-2: #23272d;
+    --line: #2e333a;
+    --line-strong: #424954;
+    --accent: #7aa9db;
+    --accent-soft: #1d2a38;
+
+    --high: #f08a8a;
+    --high-bg: #341c1c;
+    --medium: #e0b062;
+    --medium-bg: #33280f;
+    --low: #9db8cf;
+    --low-bg: #1e262e;
+    --info: #8b9099;
+    --info-bg: #22262b;
+
+    --verified: #6fc79a;
+    --verified-bg: #14302250;
+    --asserted: #e0b062;
+    --asserted-bg: #33280f;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px 64px;
+}
+.wrap-narrow {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px 64px;
+}
+
+/* ---------- header ---------- */
+header.top {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  margin-bottom: 28px;
+}
+header.top .inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.brand {
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.brand-sub {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.spacer {
+  flex: 1;
+}
+
+/* ---------- generic ---------- */
+h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 24px 0 4px;
+  letter-spacing: -0.01em;
+}
+h2 {
+  font-size: 13px;
+  font-weight: 650;
+  margin: 28px 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.lede {
+  color: var(--ink-2);
+  margin: 0 0 20px;
+}
+.mono {
+  font-family: var(--mono);
+}
+.dim {
+  color: var(--ink-3);
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.empty {
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* ---------- queue table ---------- */
+table.queue {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+table.queue th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+table.queue td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+table.queue tr:last-child td {
+  border-bottom: none;
+}
+table.queue tr:hover td {
+  background: var(--surface-2);
+}
+td.risk {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  width: 54px;
+}
+
+/* A severity stripe on the row: form, not just colour. */
+tr.sev-high td:first-child {
+  box-shadow: inset 3px 0 0 var(--high);
+}
+tr.sev-medium td:first-child {
+  box-shadow: inset 3px 0 0 var(--medium);
+}
+tr.sev-low td:first-child {
+  box-shadow: inset 3px 0 0 var(--low);
+}
+
+/* ---------- chips ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chip.high {
+  color: var(--high);
+  background: var(--high-bg);
+  border-color: color-mix(in srgb, var(--high) 28%, transparent);
+}
+.chip.medium {
+  color: var(--medium);
+  background: var(--medium-bg);
+  border-color: color-mix(in srgb, var(--medium) 28%, transparent);
+}
+.chip.low {
+  color: var(--low);
+  background: var(--low-bg);
+  border-color: color-mix(in srgb, var(--low) 28%, transparent);
+}
+.chip.info {
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: var(--line);
+}
+.chip.verified {
+  color: var(--verified);
+  background: var(--verified-bg);
+  border-color: color-mix(in srgb, var(--verified) 30%, transparent);
+}
+.chip.asserted {
+  color: var(--asserted);
+  background: var(--asserted-bg);
+  border-color: color-mix(in srgb, var(--asserted) 30%, transparent);
+}
+.chip.env {
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.verdict {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border-radius: 4px;
+}
+.verdict.ALLOW {
+  color: var(--verified);
+  background: var(--verified-bg);
+}
+.verdict.REVIEW {
+  color: var(--medium);
+  background: var(--medium-bg);
+}
+.verdict.BLOCK {
+  color: var(--high);
+  background: var(--high-bg);
+}
+
+/* ---------- reason codes ---------- */
+ul.reasons {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+ul.reasons li {
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--surface);
+}
+li.sev-high {
+  border-left-color: var(--high);
+}
+li.sev-medium {
+  border-left-color: var(--medium);
+}
+li.sev-low {
+  border-left-color: var(--low);
+}
+li.sev-info {
+  border-left-color: var(--line-strong);
+}
+.reason-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.reason-code {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+.reason-detail {
+  color: var(--ink-2);
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.reason-guidance {
+  color: var(--ink-3);
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+/* ---------- the agent's own words (threat T04) ----------
+   Quarantined: hatched edge, monospace, no rich text. Nothing in here can look like a VERA verdict. */
+.agent-region {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.agent-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  color: var(--ink-3);
+  padding: 6px 10px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface-2),
+    var(--surface-2) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border-bottom: 1px solid var(--line);
+}
+.agent-body {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  margin: 0;
+  background: var(--surface);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  color: var(--ink);
+}
+.agent-note {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 0 0 18px;
+}
+.redacted-mark {
+  color: var(--medium);
+  background: var(--medium-bg);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* ---------- key/value ---------- */
+dl.kv {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 6px 14px;
+  margin: 0;
+}
+dl.kv dt {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+dl.kv dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  word-break: break-word;
+}
+
+/* ---------- forms ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+label.field {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+textarea,
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 9px 11px;
+  resize: vertical;
+}
+textarea:focus,
+input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+button {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+  border-radius: var(--radius);
+  padding: 9px 16px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+}
+button:hover:not(:disabled) {
+  border-color: var(--ink-3);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.approve {
+  background: var(--verified);
+  border-color: var(--verified);
+  color: #fff;
+}
+button.reject {
+  background: var(--high);
+  border-color: var(--high);
+  color: #fff;
+}
+button.quiet {
+  background: transparent;
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.notice {
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-top: 12px;
+  border: 1px solid;
+}
+.notice.ok {
+  color: var(--verified);
+  background: var(--verified-bg);
+  border-color: color-mix(in srgb, var(--verified) 30%, transparent);
+}
+.notice.bad {
+  color: var(--high);
+  background: var(--high-bg);
+  border-color: color-mix(in srgb, var(--high) 30%, transparent);
+}
+.notice.warn {
+  color: var(--medium);
+  background: var(--medium-bg);
+  border-color: color-mix(in srgb, var(--medium) 30%, transparent);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 14px;
+}
+.tabs a {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.tabs a.on {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  dl.kv {
+    grid-template-columns: 120px 1fr;
+  }
+}

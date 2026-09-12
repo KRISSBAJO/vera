@@ -28,6 +28,8 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `apps/api` | Fastify: `/v1/decide`, `/v1/decisions/:id` (+ approve / reject / outcome), `/v1/tokens/consume`, `/v1/audit-events`, tenant JWKS, `/openapi.json`. CLI: `migrate`, `bootstrap`, `add-user`, `serve`. |
 | `packages/adapters/core` | Shared adapter runtime: HTTP client, offline token verification, and the REVIEW hold loop. One implementation of the security-critical path. Apache-2.0. |
 | `packages/adapters/claude-code` | `vera-hook`: the Claude Code command hook (ADR-0002). `pre` asks VERA and verifies tokens; `post` recomputes the hash and reports outcomes; `init` writes config and hooks; `status`. Apache-2.0. |
+| `apps/dashboard` | The review queue (Next.js): triage list, decision detail with quarantined agent text, approve/reject with rationale, audited reveal of redacted values. |
+| `packages/redaction` | Masks credentials in tool arguments before storage, display, or any model call (SR-15). |
 | `packages/adapters/openai-agents` | `createVeraGuard()` for the OpenAI Agents SDK: `protect(tool, spec)` enforces (decide → verify token → run), `needsApproval()` feeds the SDK's own interruption flow. Apache-2.0. |
 
 ## Put it in front of Claude Code
@@ -65,7 +67,7 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 2. Contracts: schemas, canonicalization, decision token — done (62 tests)
 3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
 4. Baselines, outcomes, second adapter — **done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`, `packages/adapters/openai-agents`; 235 tests).
-5. Hardening, dashboard v0
+5. Hardening, dashboard v0 — **redaction + the review queue done**. Remaining: KMS signing and key rotation, tenant-signed class tables, Slack notifications.
 6. Design-partner packaging
 
 Days 1–10 also run the validation interviews (brief Appendix A); the day-10 gate decides whether Policy Pack 1 stays on coding agents.
