@@ -1,0 +1,254 @@
+{
+  "POLICY.DENY": {
+    "category": "POLICY",
+    "defaultSeverity": "high",
+    "description": "A forbid policy matched.",
+    "guidance": "This is a hard rule. Nothing a reviewer sees here changes it; the policy owner must change the policy."
+  },
+  "POLICY.REQUIRE_REVIEW": {
+    "category": "POLICY",
+    "defaultSeverity": "high",
+    "description": "A permit policy annotated @vera_effect(\"review\") matched.",
+    "guidance": "Check the named policy; it says why this class of action needs a human."
+  },
+  "POLICY.ENV_RESTRICTED": {
+    "category": "POLICY",
+    "defaultSeverity": "high",
+    "description": "The action targets an environment the actor is not permitted to change.",
+    "guidance": "Confirm the environment is really the intended one."
+  },
+  "POLICY.LIMIT_EXCEEDED": {
+    "category": "POLICY",
+    "defaultSeverity": "high",
+    "description": "A configured numeric limit (amount, count, size) was exceeded.",
+    "guidance": "Compare the requested magnitude with the limit and with the baseline numbers shown."
+  },
+  "POLICY.SOD_VIOLATION": {
+    "category": "POLICY",
+    "defaultSeverity": "high",
+    "description": "The approver is the actor, the acting-for principal, the key owner, or the policy author.",
+    "guidance": "This approval is refused. Route to a different reviewer."
+  },
+  "POLICY.DEFAULT_DENY": {
+    "category": "POLICY",
+    "defaultSeverity": "high",
+    "description": "No policy matched and the tenant default for this class is not ALLOW.",
+    "guidance": "Nobody has written a rule for this yet. Decide, then consider adding a policy so the next one is faster."
+  },
+  "BASELINE.ACTOR_ACTION_NOVEL": {
+    "category": "BASELINE",
+    "defaultSeverity": "medium",
+    "description": "This actor has never performed this action class before.",
+    "guidance": "First time is not wrong, but ask whether this actor should be doing this at all."
+  },
+  "BASELINE.TARGET_NOVEL": {
+    "category": "BASELINE",
+    "defaultSeverity": "medium",
+    "description": "This actor has never touched this target before.",
+    "guidance": "Check the target is the intended one, not a look-alike."
+  },
+  "BASELINE.TIME_ANOMALY": {
+    "category": "BASELINE",
+    "defaultSeverity": "low",
+    "description": "The action falls outside the org's usual hours for this class (server time, tenant timezone).",
+    "guidance": "Off-hours actions deserve a second look; the numbers behind this code are shown."
+  },
+  "BASELINE.MAGNITUDE_DEVIATION": {
+    "category": "BASELINE",
+    "defaultSeverity": "medium",
+    "description": "A numeric argument is far above the org's historical p95 for this class.",
+    "guidance": "Compare with the p50/p95 shown. A 5x jump is worth a question."
+  },
+  "BASELINE.FREQUENCY_SPIKE": {
+    "category": "BASELINE",
+    "defaultSeverity": "medium",
+    "description": "This actor is performing this action much more often than usual.",
+    "guidance": "Bursts precede mistakes and attacks alike. Check what is driving the volume."
+  },
+  "BASELINE.INSUFFICIENT_HISTORY": {
+    "category": "BASELINE",
+    "defaultSeverity": "info",
+    "description": "Fewer than the minimum observations exist; baseline codes were not evaluated for this key.",
+    "guidance": "VERA has no history to compare against here. This is stated, not hidden."
+  },
+  "PREREQ.MISSING_APPROVAL": {
+    "category": "PREREQ",
+    "defaultSeverity": "high",
+    "description": "A required upstream approval (e.g. PR review) is not present in verified evidence.",
+    "guidance": "Look for the PR review in the evidence panel; asserted claims do not count."
+  },
+  "PREREQ.TESTS_NOT_PASSED": {
+    "category": "PREREQ",
+    "defaultSeverity": "high",
+    "description": "Verified CI status is not success.",
+    "guidance": "Check the CI run named in the evidence."
+  },
+  "PREREQ.BACKUP_NOT_VERIFIED": {
+    "category": "PREREQ",
+    "defaultSeverity": "high",
+    "description": "No verified backup evidence exists for a change that needs one.",
+    "guidance": "An adapter saying \"backup done\" is an assertion. Verified evidence comes from the backup system."
+  },
+  "PREREQ.NO_ROLLBACK_PLAN": {
+    "category": "PREREQ",
+    "defaultSeverity": "medium",
+    "description": "No verified rollback procedure is attached to a change that needs one.",
+    "guidance": "Ask what happens if this goes wrong."
+  },
+  "PREREQ.STAGING_NOT_DEPLOYED": {
+    "category": "PREREQ",
+    "defaultSeverity": "medium",
+    "description": "The change has no verified staging deployment.",
+    "guidance": "Check whether the commit reached staging."
+  },
+  "EVIDENCE.MISSING": {
+    "category": "EVIDENCE",
+    "defaultSeverity": "medium",
+    "description": "An evidence provider did not answer within budget.",
+    "guidance": "Absence of evidence is not safety. Decide as if the fact is unknown."
+  },
+  "EVIDENCE.STALE": {
+    "category": "EVIDENCE",
+    "defaultSeverity": "low",
+    "description": "Evidence is older than its TTL.",
+    "guidance": "The fact may have changed since it was observed."
+  },
+  "EVIDENCE.CONTRADICTED": {
+    "category": "EVIDENCE",
+    "defaultSeverity": "high",
+    "description": "Verified evidence contradicts an asserted claim in the request.",
+    "guidance": "The agent said one thing; the source says another. Treat the request with suspicion."
+  },
+  "EVIDENCE.VERIFIED": {
+    "category": "EVIDENCE",
+    "defaultSeverity": "info",
+    "description": "Verified evidence supports the action.",
+    "guidance": "Informational."
+  },
+  "EVIDENCE.ASSERTED": {
+    "category": "EVIDENCE",
+    "defaultSeverity": "info",
+    "description": "The request carried adapter-asserted evidence; it was recorded but cannot satisfy prerequisites.",
+    "guidance": "Shown so you know the agent claimed it. Do not weigh it as proof."
+  },
+  "EVIDENCE.PROBABILISTIC": {
+    "category": "EVIDENCE",
+    "defaultSeverity": "info",
+    "description": "A fact was extracted by a model from unstructured input.",
+    "guidance": "Treat as a hint with provenance, not a fact."
+  },
+  "ACTION.DESTRUCTIVE_HINT": {
+    "category": "ACTION",
+    "defaultSeverity": "medium",
+    "description": "The tool or command is annotated or recognised as destructive.",
+    "guidance": "Confirm the blast radius."
+  },
+  "ACTION.IRREVERSIBLE": {
+    "category": "ACTION",
+    "defaultSeverity": "high",
+    "description": "The action cannot be undone (e.g. force-push, hard delete, payment).",
+    "guidance": "There is no rollback. Be sure."
+  },
+  "ACTION.SENSITIVE_RESOURCE": {
+    "category": "ACTION",
+    "defaultSeverity": "medium",
+    "description": "The target is marked high sensitivity.",
+    "guidance": "Production data, secrets, or money."
+  },
+  "ACTION.BULK": {
+    "category": "ACTION",
+    "defaultSeverity": "medium",
+    "description": "The action affects many items at once.",
+    "guidance": "Check the count."
+  },
+  "ACTION.INDIRECT_INPUT": {
+    "category": "ACTION",
+    "defaultSeverity": "medium",
+    "description": "A shell command contains variable expansion or command substitution; its effect is resolved at runtime.",
+    "guidance": "What you see is not exactly what will run. Ask what the variables resolve to."
+  },
+  "ACTION.UNCLASSIFIED_SHELL": {
+    "category": "ACTION",
+    "defaultSeverity": "medium",
+    "description": "The shell command could not be classified into a more specific action class.",
+    "guidance": "Read the command. The classifier could not."
+  },
+  "IDENTITY.ASSERTED": {
+    "category": "IDENTITY",
+    "defaultSeverity": "info",
+    "description": "The acting-for identity was asserted by the adapter, not verified by an identity provider.",
+    "guidance": "The person named may not be the person acting. SoD also excludes the key owner."
+  },
+  "TOKEN.HASH_MISMATCH": {
+    "category": "TOKEN",
+    "defaultSeverity": "high",
+    "description": "The executed action does not match the approved action hash.",
+    "guidance": "Something changed between approval and execution. Treat as a bypass attempt."
+  },
+  "TOKEN.ALREADY_CONSUMED": {
+    "category": "TOKEN",
+    "defaultSeverity": "high",
+    "description": "A single-use token was presented twice.",
+    "guidance": "Replay. Investigate the receiver."
+  },
+  "TOKEN.EXPIRED": {
+    "category": "TOKEN",
+    "defaultSeverity": "medium",
+    "description": "The token is past its expiry.",
+    "guidance": "A new decision is required."
+  },
+  "TOKEN.BAD_SIGNATURE": {
+    "category": "TOKEN",
+    "defaultSeverity": "high",
+    "description": "The token signature did not verify against the tenant JWKS.",
+    "guidance": "Forged or foreign token."
+  },
+  "TOKEN.REVOKED_KEY": {
+    "category": "TOKEN",
+    "defaultSeverity": "high",
+    "description": "The token was signed with a revoked key.",
+    "guidance": "Rotate and investigate."
+  },
+  "TOKEN.AUDIENCE_MISMATCH": {
+    "category": "TOKEN",
+    "defaultSeverity": "high",
+    "description": "The token audience does not match this receiver.",
+    "guidance": "Token issued for a different receiver."
+  },
+  "TOKEN.TENANT_MISMATCH": {
+    "category": "TOKEN",
+    "defaultSeverity": "high",
+    "description": "The token tenant does not match this receiver's tenant.",
+    "guidance": "Cross-tenant token."
+  },
+  "TOKEN.MALFORMED": {
+    "category": "TOKEN",
+    "defaultSeverity": "medium",
+    "description": "The token could not be parsed or its claims failed schema validation.",
+    "guidance": "Broken client or tampering."
+  },
+  "SYSTEM.FAIL_CLOSED": {
+    "category": "SYSTEM",
+    "defaultSeverity": "info",
+    "description": "An evaluator failed and the configured behaviour was to fail closed.",
+    "guidance": "VERA chose caution because a component failed."
+  },
+  "SYSTEM.EVALUATOR_TIMEOUT": {
+    "category": "SYSTEM",
+    "defaultSeverity": "low",
+    "description": "An evaluator exceeded its time budget.",
+    "guidance": "The decision was made without that evaluator."
+  },
+  "SYSTEM.DEGRADED_MODE": {
+    "category": "SYSTEM",
+    "defaultSeverity": "medium",
+    "description": "The adapter could not reach VERA and answered from its signed safe-default table.",
+    "guidance": "This action was not decided by VERA. It was allowed only because its class is read-only."
+  },
+  "SYSTEM.HOLD_EXPIRED": {
+    "category": "SYSTEM",
+    "defaultSeverity": "medium",
+    "description": "A REVIEW was not resolved within the adapter hold window; the runtime fell back to its own prompt.",
+    "guidance": "No VERA token was issued. Whatever happened next was decided at the keyboard."
+  }
+}

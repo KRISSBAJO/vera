@@ -1,0 +1,31 @@
+{
+  "name": "@vera/canon",
+  "version": "0.1.0",
+  "description": "Canonical action form and action_hash (RFC 8785 JCS + SHA-256); shared byte-for-byte by server and adapters",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "canonicalize": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "fast-check": "^4.10.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

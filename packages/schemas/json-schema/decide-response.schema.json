@@ -1,0 +1,276 @@
+{
+  "$id": "https://vera.dev/schemas/decide-response",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "ALLOW",
+        "REVIEW",
+        "BLOCK"
+      ]
+    },
+    "risk": {
+      "type": "object",
+      "properties": {
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "calibrated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "score",
+        "calibrated"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "POLICY.DENY",
+              "POLICY.REQUIRE_REVIEW",
+              "POLICY.ENV_RESTRICTED",
+              "POLICY.LIMIT_EXCEEDED",
+              "POLICY.SOD_VIOLATION",
+              "POLICY.DEFAULT_DENY",
+              "BASELINE.ACTOR_ACTION_NOVEL",
+              "BASELINE.TARGET_NOVEL",
+              "BASELINE.TIME_ANOMALY",
+              "BASELINE.MAGNITUDE_DEVIATION",
+              "BASELINE.FREQUENCY_SPIKE",
+              "BASELINE.INSUFFICIENT_HISTORY",
+              "PREREQ.MISSING_APPROVAL",
+              "PREREQ.TESTS_NOT_PASSED",
+              "PREREQ.BACKUP_NOT_VERIFIED",
+              "PREREQ.NO_ROLLBACK_PLAN",
+              "PREREQ.STAGING_NOT_DEPLOYED",
+              "EVIDENCE.MISSING",
+              "EVIDENCE.STALE",
+              "EVIDENCE.CONTRADICTED",
+              "EVIDENCE.VERIFIED",
+              "EVIDENCE.ASSERTED",
+              "EVIDENCE.PROBABILISTIC",
+              "ACTION.DESTRUCTIVE_HINT",
+              "ACTION.IRREVERSIBLE",
+              "ACTION.SENSITIVE_RESOURCE",
+              "ACTION.BULK",
+              "ACTION.INDIRECT_INPUT",
+              "ACTION.UNCLASSIFIED_SHELL",
+              "IDENTITY.ASSERTED",
+              "TOKEN.HASH_MISMATCH",
+              "TOKEN.ALREADY_CONSUMED",
+              "TOKEN.EXPIRED",
+              "TOKEN.BAD_SIGNATURE",
+              "TOKEN.REVOKED_KEY",
+              "TOKEN.AUDIENCE_MISMATCH",
+              "TOKEN.TENANT_MISMATCH",
+              "TOKEN.MALFORMED",
+              "SYSTEM.FAIL_CLOSED",
+              "SYSTEM.EVALUATOR_TIMEOUT",
+              "SYSTEM.DEGRADED_MODE",
+              "SYSTEM.HOLD_EXPIRED"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "policy_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "evidence_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ]
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "trust": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "asserted"
+            ]
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "source",
+          "trust",
+          "observed_at",
+          "data"
+        ]
+      }
+    },
+    "required_actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "HUMAN_APPROVAL",
+          "REMEDIATION"
+        ]
+      }
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "routed_to": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "sod": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "quorum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "url",
+        "routed_to",
+        "sod",
+        "quorum"
+      ]
+    },
+    "action_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "policy_set_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "baseline_snapshot_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "supersedes": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "decision_token": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "decision_id",
+    "decision",
+    "risk",
+    "confidence",
+    "reason_codes",
+    "evidence",
+    "required_actions",
+    "action_hash",
+    "policy_set_version",
+    "supersedes",
+    "expires_at",
+    "decision_token"
+  ]
+}
