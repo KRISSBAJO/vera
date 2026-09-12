@@ -8,7 +8,13 @@
  *
  * Only `context.evidence` (verified) can satisfy a prerequisite. `context.asserted` is never consulted to
  * clear one — see schema.ts.
+ *
+ * v2 (2026-09-11, first dogfood session): added non-production permits for http.mutation and
+ * message.send, and a production REVIEW for both. Without them a coding agent on a laptop could not
+ * click a browser button or publish an artifact — every such call fell to POLICY.DEFAULT_DENY.
  */
+export const POLICY_PACK_1_VERSION = 2;
+
 export const POLICY_PACK_1 = `
 // ---- version control ----
 
@@ -28,6 +34,9 @@ when {
 @vera_effect("review")
 permit(principal, action == VERA::Action::"vcs.push", resource)
 when { context.args has force && context.args.force == true };
+
+@id("vcs-merge-allowed")
+permit(principal, action == VERA::Action::"vcs.merge", resource);
 
 // ---- production deployment ----
 
@@ -95,6 +104,26 @@ when { resource has environment && resource.environment == "production" };
 permit(principal, action == VERA::Action::"shell.exec", resource)
 unless { resource has environment && resource.environment == "production" };
 
+// ---- outbound: HTTP mutations and messages ----
+
+@id("non-prod-http-mutation-allowed")
+permit(principal, action == VERA::Action::"http.mutation", resource)
+unless { resource has environment && resource.environment == "production" };
+
+@id("prod-http-mutation-requires-review")
+@vera_effect("review")
+permit(principal, action == VERA::Action::"http.mutation", resource)
+when { resource has environment && resource.environment == "production" };
+
+@id("non-prod-message-send-allowed")
+permit(principal, action == VERA::Action::"message.send", resource)
+unless { resource has environment && resource.environment == "production" };
+
+@id("prod-message-send-requires-review")
+@vera_effect("review")
+permit(principal, action == VERA::Action::"message.send", resource)
+when { resource has environment && resource.environment == "production" };
+
 // ---- secrets ----
 
 @id("secret-read-allowed")
@@ -103,6 +132,12 @@ permit(principal, action == VERA::Action::"secret.read", resource);
 @id("secret-write-requires-review")
 @vera_effect("review")
 permit(principal, action == VERA::Action::"secret.write", resource);
+
+// ---- infrastructure ----
+
+@id("infra-change-requires-review")
+@vera_effect("review")
+permit(principal, action == VERA::Action::"infra.change", resource);
 
 // ---- read-only ----
 

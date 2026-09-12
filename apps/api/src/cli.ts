@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { createDb } from '@vera/db';
+import { POLICY_PACK_1, POLICY_PACK_1_VERSION } from '@vera/policy-engine';
 import { addReviewer, bootstrapTenant } from './bootstrap.js';
 import { loadConfig } from './config.js';
+import { activatePolicySet } from './policy-admin.js';
 
 const usage = `vera-api <command>
 
@@ -10,6 +12,7 @@ const usage = `vera-api <command>
   bootstrap --org <name> --email <admin>    create a tenant with Policy Pack 1 active; prints secrets once
             [--timezone <tz>] [--aud <receiver aud>]
   add-user  --org-id <id> --email <email>   add a reviewer with a session token; prints the token once
+  activate-policies --org-id <id>           activate the current Policy Pack 1 as a new policy-set version
   serve                                     start the API (same as: node dist/server.js)
 `;
 
@@ -74,6 +77,22 @@ Tenant created. These secrets are shown ONCE and stored only as hashes.
     const r = await addReviewer(vera, need(values['org-id'], 'org-id'), need(values.email, 'email'));
     await vera.close();
     console.log(`\n  user_id          ${r.userId}\n  reviewer session ${r.reviewerToken}\n`);
+    break;
+  }
+  case 'activate-policies': {
+    const config = loadConfig();
+    const vera = createDb(config.databaseUrl, { max: 2 });
+    const r = await activatePolicySet(
+      vera,
+      need(values['org-id'], 'org-id'),
+      POLICY_PACK_1,
+      null,
+      `Policy Pack 1 v${POLICY_PACK_1_VERSION}`,
+    );
+    await vera.close();
+    console.log(
+      `activated ps_${r.version} (${r.policies} policies)${r.retired ? `, retired ps_${r.retired}` : ''}`,
+    );
     break;
   }
   case 'serve':

@@ -9,7 +9,7 @@ import * as cedar from '@cedar-policy/cedar-wasm/nodejs';
 import type { ActionClass, Decision, ReasonCodeEntry } from '@vera/schemas';
 import { DECLARED_ATTRIBUTES, VERA_NAMESPACE, veraSchema } from './schema.js';
 
-export { POLICY_PACK_1 } from './policy-pack-1.js';
+export { POLICY_PACK_1, POLICY_PACK_1_VERSION } from './policy-pack-1.js';
 export {
   ARG_ATTRIBUTES,
   DECLARED_ATTRIBUTES,
