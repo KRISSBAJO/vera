@@ -41,15 +41,13 @@ export async function bootstrapTenant(
 
   await vera.withTenant(orgId, async (tx) => {
     await tx.insert(organizations).values({ id: orgId, name: p.orgName, timezone: p.timezone ?? 'UTC' });
-    await tx
-      .insert(users)
-      .values({
-        id: userId,
-        orgId,
-        email: p.adminEmail,
-        name: p.adminName ?? p.adminEmail,
-        roles: ['admin', 'reviewer'],
-      });
+    await tx.insert(users).values({
+      id: userId,
+      orgId,
+      email: p.adminEmail,
+      name: p.adminName ?? p.adminEmail,
+      roles: ['admin', 'reviewer'],
+    });
     await tx.insert(signingKeys).values({
       id: newId('sk'),
       orgId,
@@ -110,15 +108,13 @@ export async function addReviewer(
   const session = newSecret('vera_rs');
   await vera.withTenant(orgId, async (tx) => {
     await tx.insert(users).values({ id: userId, orgId, email, name, roles: ['reviewer'] });
-    await tx
-      .insert(reviewerSessions)
-      .values({
-        id: newId('ses'),
-        orgId,
-        userId,
-        tokenHash: session.hash,
-        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
-      });
+    await tx.insert(reviewerSessions).values({
+      id: newId('ses'),
+      orgId,
+      userId,
+      tokenHash: session.hash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+    });
     await appendAudit(tx, orgId, 'user.created', 'system', { user_id: userId, email, roles: ['reviewer'] });
   });
   return { userId, reviewerToken: session.secret };

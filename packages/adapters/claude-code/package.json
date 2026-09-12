@@ -1,0 +1,39 @@
+{
+  "name": "@vera/adapter-claude-code",
+  "version": "0.1.0",
+  "description": "vera-hook: Claude Code command hook that asks VERA before consequential tool calls (PreToolUse) and reports outcomes (PostToolUse)",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "vera-hook": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vera/canon": "workspace:*",
+    "@vera/decision-token": "workspace:*",
+    "@vera/schemas": "workspace:*",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@vera/api": "workspace:*",
+    "@vera/db": "workspace:*",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

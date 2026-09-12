@@ -104,15 +104,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         .status(err.status)
         .send({ error: { code: err.code, message: err.message, details: err.details } });
     if (hasZodFastifySchemaValidationErrors(err))
-      return reply
-        .status(400)
-        .send({
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: 'request does not match schema',
-            details: err.validation,
-          },
-        });
+      return reply.status(400).send({
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'request does not match schema',
+          details: err.validation,
+        },
+      });
     app.log.error(err);
     return reply.status(500).send({ error: { code: 'INTERNAL', message: 'internal error' } });
   });
@@ -409,16 +407,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             .where(eq(approvals.reviewId, review.id));
           if (prior.some((a) => a.userId === reviewer.userId)) throw conflict('ALREADY_REVIEWED');
 
-          await tx
-            .insert(approvals)
-            .values({
-              id: newId('apr'),
-              orgId: reviewer.orgId,
-              reviewId: review.id,
-              userId: reviewer.userId,
-              verdict,
-              rationale: req.body.rationale ?? null,
-            });
+          await tx.insert(approvals).values({
+            id: newId('apr'),
+            orgId: reviewer.orgId,
+            reviewId: review.id,
+            userId: reviewer.userId,
+            verdict,
+            rationale: req.body.rationale ?? null,
+          });
           await appendAudit(tx, reviewer.orgId, `review.${verdict}`, `user:${reviewer.userId}`, {
             decision_id: decision.id,
             rationale: req.body.rationale ?? null,
@@ -568,17 +564,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           .where(eq(decisions.id, req.params.id))
           .limit(1);
         if (!d) throw notFound('decision');
-        await tx
-          .insert(outcomes)
-          .values({
-            id: newId('out'),
-            orgId: key.orgId,
-            decisionId: d.id,
-            source: 'adapter',
-            trust: 'asserted',
-            kind: req.body.kind,
-            data: req.body.data,
-          });
+        await tx.insert(outcomes).values({
+          id: newId('out'),
+          orgId: key.orgId,
+          decisionId: d.id,
+          source: 'adapter',
+          trust: 'asserted',
+          kind: req.body.kind,
+          data: req.body.data,
+        });
         await appendAudit(tx, key.orgId, 'outcome.recorded', `key:${key.keyId}`, {
           decision_id: d.id,
           kind: req.body.kind,

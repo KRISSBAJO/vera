@@ -4,6 +4,14 @@
   "description": "VERA decision API: /v1/decide, review approve/reject, JWKS, token consumption, outcomes, audit",
   "type": "module",
   "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "vera-api": "./dist/cli.js"
   },
