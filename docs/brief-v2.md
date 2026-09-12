@@ -231,7 +231,7 @@ Adding a code is a versioned change with a migration note. Codes never change me
 
 ### 7.1 Policy engine — Cedar
 
-- Policies are Cedar. Tenants get a schema (`Principal` = user/agent, `Action` = `action.class`, `Resource` = target with attributes, `Context` = normalized args, evidence flags, baseline flags).
+- Policies are Cedar. Tenants get a schema (`Principal` = user/agent, `Action` = `action.class`, `Resource` = target with attributes, `Context` = declared args, verified evidence flags, asserted claims, baseline flags, hints, `indirect_input`). Every record is **closed**: only declared attributes are visible to policy, the engine projects incoming context onto them, and undeclared arguments stay in the hash but not in the policy's view (ADR-0004). `context.evidence` holds verified facts only; `context.asserted` holds runtime claims — a policy cannot clear a prerequisite from `asserted` because Policy Pack 1 never reads it for that purpose.
 - Three outcomes from a two-outcome language: `forbid` → **BLOCK**; `permit` annotated `@vera_effect("review")` → **REVIEW**; unannotated `permit` → **ALLOW**; no match → tenant default (`BLOCK` for consequential classes, `REVIEW` otherwise). Cedar diagnostics (`reason` policy ids) become `POLICY.*` reason codes with `policy_id@version`.
 - **Precedence is most-restrictive-wins:** any matching `forbid` → BLOCK; otherwise any matching review-annotated `permit` → REVIEW, even if a plain `permit` also matches; ALLOW only when every matching permit is unannotated (A9).
 - Policies are versioned, activated explicitly, and carry **test cases** (`POST /v1/policies/{id}/test` runs stored example requests and asserts outcomes). A policy with no passing tests cannot be activated.
