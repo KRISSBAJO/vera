@@ -30,6 +30,8 @@ export interface RedactionPattern {
 export interface OrgDefaults {
   /** Tenant-specific secret shapes, applied before the built-in rules (SR-15). */
   redaction_patterns?: RedactionPattern[];
+  /** Signed and served to adapters; never editable on the adapter's machine (SR-07). */
+  adapter_config?: Record<string, unknown>;
   /** Verdict when no policy matches, per class group (brief §7.1). */
   no_match?: { consequential?: 'BLOCK' | 'REVIEW'; read_only?: 'ALLOW' | 'REVIEW' };
   /** Severity → risk-score weight. Part of policy_set_version for reproducibility (brief §7.4). */

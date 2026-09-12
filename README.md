@@ -67,7 +67,7 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 2. Contracts: schemas, canonicalization, decision token — done (62 tests)
 3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
 4. Baselines, outcomes, second adapter — **done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`, `packages/adapters/openai-agents`; 235 tests).
-5. Hardening, dashboard v0 — **redaction, the review queue, and key rotation/revocation done**. Remaining: the KMS signer (ADR-0005 — custody is development-grade until it lands), tenant-signed class tables, Slack notifications.
+5. Hardening, dashboard v0 — **redaction, the review queue, key rotation/revocation, and tenant-signed class tables done**. Remaining: the KMS signer (ADR-0005 — custody is development-grade until it lands) and Slack notifications, both blocked on credentials.
 6. Design-partner packaging
 
 Days 1–10 also run the validation interviews (brief Appendix A); the day-10 gate decides whether Policy Pack 1 stays on coding agents.

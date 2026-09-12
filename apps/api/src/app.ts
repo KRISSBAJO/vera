@@ -8,6 +8,7 @@ import { verifyDecisionToken } from '@vera/decision-token';
 import { type EvidenceProvider, gatherEvidence } from '@vera/evidence';
 import { redact, rulesFor, tenantRules } from '@vera/redaction';
 import {
+  AdapterConfigSchema,
   DecideRequestSchema,
   type DecideResponse,
   DecideResponseSchema,
@@ -26,6 +27,7 @@ import {
 } from 'fastify-type-provider-zod';
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
+import { getAdapterConfig, setAdapterConfig, signAdapterConfig } from './adapter-config.js';
 import { requireApiKey, requireReviewer } from './auth.js';
 import {
   lookupBaselines,
@@ -676,6 +678,38 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!me?.roles.includes('admin')) throw forbidden('ADMIN_REQUIRED', 'this needs an administrator');
     return me;
   };
+
+  // ---------- signed adapter configuration (SR-07, threats T19/T12) ----------
+  app.get(
+    '/v1/adapter-config',
+    {
+      onRequest: requireApiKey(vera),
+      schema: { response: { 200: z.object({ bundle: z.string(), config: AdapterConfigSchema }) } },
+    },
+    async (req) => {
+      const key = req.key!;
+      return vera.withTenant(key.orgId, (tx) => signAdapterConfig(tx, deps, key.orgId, key.receiverAud));
+    },
+  );
+
+  app.put(
+    '/v1/adapter-config',
+    {
+      onRequest: requireReviewer(vera),
+      schema: {
+        body: AdapterConfigSchema.partial(),
+        response: { 200: AdapterConfigSchema, 403: ErrorSchema },
+      },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      return vera.withTenant(reviewer.orgId, async (tx) => {
+        await assertAdmin(tx, reviewer);
+        const current = await getAdapterConfig(tx, reviewer.orgId);
+        return setAdapterConfig(tx, reviewer.orgId, { ...current, ...req.body }, `user:${reviewer.userId}`);
+      });
+    },
+  );
 
   // ---------- signing keys (SR-11, threat T14) ----------
   const KeySchema = z.object({

@@ -96,6 +96,13 @@ export class VeraClient {
     await this.call('POST', `/v1/decisions/${encodeURIComponent(id)}/outcome`, { kind, data });
   }
 
+  /** The tenant-signed class and fail-mode tables (SR-07). Verified before use, never trusted raw. */
+  async adapterConfig(): Promise<{ bundle: string }> {
+    const r = (await this.call('GET', '/v1/adapter-config')) as { bundle?: unknown };
+    if (typeof r.bundle !== 'string') throw new VeraUnreachable('adapter config response had no bundle');
+    return { bundle: r.bundle };
+  }
+
   /** Tenant JWKS, cached for 10 minutes. After the first fetch, token verification is offline. */
   async jwks(): Promise<TenantJwks> {
     if (this.jwksCache && Date.now() - this.jwksCache.fetchedAt < 10 * 60 * 1000) return this.jwksCache.value;

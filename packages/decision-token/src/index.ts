@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import {
+  ADAPTER_CONFIG_TYP,
+  type AdapterConfig,
+  AdapterConfigClaimsSchema,
   DECISION_TOKEN_TYP,
   DEFAULT_ALLOW_TTL_SECONDS,
   DEFAULT_APPROVAL_TTL_SECONDS,
+  DEFAULT_CONFIG_TTL_SECONDS,
   type DecisionTokenClaims,
   DecisionTokenClaimsSchema,
   type TenantJwks,
@@ -63,14 +67,22 @@ export function buildTenantJwks(
 /** The signing boundary. Production implements this over a KMS; nothing else in the codebase touches private keys. */
 export interface Signer {
   readonly kid: string;
+  /** Always stamps the decision-token typ. */
   sign(jwt: SignJWT): Promise<string>;
+  /**
+   * Sign something that is not a decision. The type must be named explicitly, so a config bundle can
+   * never be minted by the decision path by accident, and neither can be replayed as the other.
+   */
+  signAs(jwt: SignJWT, typ: string): Promise<string>;
 }
 
 export function localSigner(key: TenantSigningKey): Signer {
+  const signAs = (jwt: SignJWT, typ: string) =>
+    jwt.setProtectedHeader({ alg: 'EdDSA', kid: key.kid, typ }).sign(key.privateKey);
   return {
     kid: key.kid,
-    sign: (jwt) =>
-      jwt.setProtectedHeader({ alg: 'EdDSA', kid: key.kid, typ: DECISION_TOKEN_TYP }).sign(key.privateKey),
+    sign: (jwt) => signAs(jwt, DECISION_TOKEN_TYP),
+    signAs,
   };
 }
 
@@ -177,6 +189,92 @@ export async function verifyDecisionToken(
   if (claims.tenant !== expect.tenant) return { ok: false, code: 'TOKEN.TENANT_MISMATCH' };
   if (claims.action_hash !== expect.action_hash) return { ok: false, code: 'TOKEN.HASH_MISMATCH' };
   return { ok: true, claims, kid: header.kid };
+}
+
+// ---------- signed adapter configuration (SR-07, threats T19/T12) ----------
+
+/**
+ * The class table and fail-mode table an adapter is allowed to obey. Signed with the same tenant key
+ * as decisions but under a distinct `typ`, so a decision token can never be presented as a config
+ * bundle, nor the reverse.
+ */
+export async function issueAdapterConfig(
+  input: { iss: string; aud: string; tenant: string; config: AdapterConfig; ttlSeconds?: number; now?: Date },
+  signer: Signer,
+): Promise<string> {
+  const iat = Math.floor((input.now ?? new Date()).getTime() / 1000);
+  const ttl = Math.min(Math.max(60, input.ttlSeconds ?? DEFAULT_CONFIG_TTL_SECONDS), 24 * 60 * 60);
+  const claims = AdapterConfigClaimsSchema.parse({
+    iss: input.iss,
+    aud: input.aud,
+    tenant: input.tenant,
+    iat,
+    exp: iat + ttl,
+    config: input.config,
+  });
+  // `tenant` must be in the payload, not only in the validated object: verification re-parses the
+  // payload against the same schema, so a claim left out here fails as malformed on every read.
+  const jwt = new SignJWT({ config: claims.config, tenant: claims.tenant })
+    .setIssuer(claims.iss)
+    .setAudience(claims.aud)
+    .setIssuedAt(claims.iat)
+    .setExpirationTime(claims.exp);
+  return signer.signAs(jwt, ADAPTER_CONFIG_TYP);
+}
+
+export type ConfigVerifyResult =
+  | { ok: true; config: AdapterConfig; expiresAt: Date }
+  | {
+      ok: false;
+      code:
+        | 'CONFIG.MALFORMED'
+        | 'CONFIG.BAD_SIGNATURE'
+        | 'CONFIG.REVOKED_KEY'
+        | 'CONFIG.EXPIRED'
+        | 'CONFIG.TENANT_MISMATCH'
+        | 'CONFIG.AUDIENCE_MISMATCH';
+      detail?: string;
+    };
+
+/**
+ * Verify a config bundle. A bundle that fails for any reason is refused rather than partially
+ * honoured — the caller falls back to built-in conservative defaults, never to unverified content.
+ */
+export async function verifyAdapterConfig(
+  bundle: string,
+  jwks: TenantJwks,
+  expect: { tenant: string; aud: string; now?: Date },
+): Promise<ConfigVerifyResult> {
+  let header: ReturnType<typeof decodeProtectedHeader>;
+  try {
+    header = decodeProtectedHeader(bundle);
+  } catch {
+    return { ok: false, code: 'CONFIG.MALFORMED', detail: 'not a JWS' };
+  }
+  if (header.typ !== ADAPTER_CONFIG_TYP)
+    return { ok: false, code: 'CONFIG.MALFORMED', detail: `typ ${String(header.typ)}` };
+  if (!header.kid) return { ok: false, code: 'CONFIG.MALFORMED', detail: 'missing kid' };
+  if (jwks.revoked.includes(header.kid)) return { ok: false, code: 'CONFIG.REVOKED_KEY', detail: header.kid };
+
+  const keySet = createLocalJWKSet({ keys: jwks.keys as Parameters<typeof createLocalJWKSet>[0]['keys'] });
+  let payload: unknown;
+  try {
+    const result = await jwtVerify(bundle, keySet, {
+      algorithms: ['EdDSA'],
+      typ: ADAPTER_CONFIG_TYP,
+      ...(expect.now ? { currentDate: expect.now } : {}),
+    });
+    payload = result.payload;
+  } catch (e) {
+    if (e instanceof joseErrors.JWTExpired) return { ok: false, code: 'CONFIG.EXPIRED' };
+    return { ok: false, code: 'CONFIG.BAD_SIGNATURE', detail: e instanceof Error ? e.name : 'unknown' };
+  }
+
+  const parsed = AdapterConfigClaimsSchema.safeParse(payload);
+  if (!parsed.success) return { ok: false, code: 'CONFIG.MALFORMED', detail: 'claims' };
+  if (parsed.data.tenant !== expect.tenant) return { ok: false, code: 'CONFIG.TENANT_MISMATCH' };
+  if (parsed.data.aud !== expect.aud) return { ok: false, code: 'CONFIG.AUDIENCE_MISMATCH' };
+  return { ok: true, config: parsed.data.config, expiresAt: new Date(parsed.data.exp * 1000) };
 }
 
 // ---------- single use ----------

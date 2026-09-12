@@ -3,6 +3,7 @@ import type { DecideResponse } from '@vera/schemas';
 import { type DecisionStatus, type VeraClient, VeraRejected } from './client.js';
 
 export * from './client.js';
+export * from './config.js';
 
 /**
  * The part of an adapter that is identical in every runtime: ask VERA, verify what comes back, and —

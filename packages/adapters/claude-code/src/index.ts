@@ -1,4 +1,10 @@
-import { resolveDecision } from '@vera/adapter-core';
+import {
+  BUILT_IN_CONFIG,
+  classFromConfig,
+  mayFailOpen,
+  resolveDecision,
+  type SignedConfigStore,
+} from '@vera/adapter-core';
 import { actionHash } from '@vera/canon';
 import { type DecideRequest, isConsequential } from '@vera/schemas';
 import { type Classified, classify, type GitFacts } from './classify.js';
@@ -42,6 +48,11 @@ export interface DegradedEvent {
 
 export interface HookDeps {
   client: VeraClient;
+  /**
+   * The tenant-signed class and fail-mode tables (SR-07). Absent means the adapter falls back to its
+   * built-in conservative defaults — which is what happens on a machine that has never reached VERA.
+   */
+  configStore?: SignedConfigStore;
   state: StateStore;
   git: (cwd: string) => GitFacts | undefined;
   /** Degraded-mode events are queued locally until an endpoint exists to report them (ADR-0002). */
@@ -97,10 +108,18 @@ export async function runPre(
   cfg: AdapterConfig,
   deps: HookDeps,
 ): Promise<PreToolUseOutput> {
+  // The signed table comes first: an operator's classification beats the built-in heuristics, and the
+  // heuristics only fill the gaps. Neither can be edited on this machine (threat T19).
+  const resolved = (await deps.configStore?.resolve()) ?? {
+    config: BUILT_IN_CONFIG,
+    source: 'builtin' as const,
+  };
+  const signedClass = classFromConfig(resolved.config, input.tool_name);
   const c = classify(input.tool_name, input.tool_input, {
     cwd: input.cwd,
     environment: cfg.environment,
     git: deps.git(input.cwd),
+    ...(signedClass ? { forcedClass: signedClass } : {}),
   });
   const hash = hashOf(c, input.tool_name);
   const request = buildRequest(input, c, cfg);
@@ -124,9 +143,10 @@ export async function runPre(
         `VERA refused the request: ${e.code}${e.message && e.message !== e.code ? ` — ${e.message}` : ''}`,
       );
     }
-    // Unreachable: signed safe-default table (SR-08). Read-only → allow and queue; consequential → ask.
+    // Unreachable: the signed fail-mode table decides, not this machine's opinion (SR-08, T12).
+    // With no verified table, the built-in one applies — read-only classes only.
     const reason = e instanceof VeraUnreachable ? e.message : String(e);
-    const answered = isConsequential(c.class) ? 'ask' : 'allow';
+    const answered = mayFailOpen(resolved.config, c.class) ? 'allow' : 'ask';
     await deps.queueDegraded({
       at: new Date(deps.now()).toISOString(),
       tool_use_id: input.tool_use_id,
@@ -139,7 +159,7 @@ export async function runPre(
     return answered === 'allow'
       ? preOutput(
           'allow',
-          `VERA unreachable (${reason}); ${c.class} is read-only — allowed in degraded mode (SYSTEM.DEGRADED_MODE)`,
+          `VERA unreachable (${reason}); ${c.class} may fail open per the ${resolved.source} table — allowed in degraded mode (SYSTEM.DEGRADED_MODE)`,
         )
       : preOutput(
           'ask',

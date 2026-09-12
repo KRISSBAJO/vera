@@ -1,4 +1,4 @@
-import type { ActionClass } from '@vera/schemas';
+import { type ActionClass, isConsequential } from '@vera/schemas';
 
 /**
  * Tool call → VERA action (class, arguments, hints, target, environment).
@@ -37,6 +37,11 @@ export interface ClassifyOptions {
   /** Baseline environment for this machine (config). Commands that clearly target production override it. */
   environment: string;
   git?: GitFacts;
+  /**
+   * A class from the tenant's signed table (SR-07). It wins over every heuristic below: an operator
+   * who has classified a tool has said something this machine is not entitled to second-guess.
+   */
+  forcedClass?: ActionClass;
 }
 
 // Claude Code built-ins.
@@ -165,6 +170,9 @@ export function classify(
     context: git?.branch ? { branch: git.branch } : {},
     ...over,
   });
+
+  if (opts.forcedClass)
+    return base(opts.forcedClass, { hints: { read_only: !isConsequential(opts.forcedClass) } });
 
   if (READ_TOOLS.has(toolName)) return base('file.read', { hints: { read_only: true } });
   if (HTTP_READ_TOOLS.has(toolName)) return base('http.read', { hints: { read_only: true } });
