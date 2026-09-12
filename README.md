@@ -29,7 +29,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `apps/api` | Fastify: `/v1/decide`, `/v1/decisions/:id` (+ approve / reject / outcome), `/v1/tokens/consume`, `/v1/audit-events`, tenant JWKS, `/openapi.json`. CLI: `migrate`, `bootstrap`, `add-user`, `serve`. |
 | `packages/adapters/core` | Shared adapter runtime: HTTP client, offline token verification, and the REVIEW hold loop. One implementation of the security-critical path. Apache-2.0. |
 | `packages/adapters/claude-code` | `vera-hook`: the Claude Code command hook (ADR-0002). `pre` asks VERA and verifies tokens; `post` recomputes the hash and reports outcomes; `init` writes config and hooks; `status`. Apache-2.0. |
-| `apps/site` | Landing page: a single static file, no build step. |
+| `apps/site` | Landing page: a single static file, no build step, plus a dependency-free static server for local viewing. |
 | `apps/dashboard` | The review queue (Next.js): triage list, decision detail with quarantined agent text, approve/reject with rationale, audited reveal of redacted values. |
 | `packages/redaction` | Masks credentials in tool arguments before storage, display, or any model call (SR-15). |
 | `packages/adapters/openai-agents` | `createVeraGuard()` for the OpenAI Agents SDK: `protect(tool, spec)` enforces (decide → verify token → run), `needsApproval()` feeds the SDK's own interruption flow. Apache-2.0. |
@@ -73,7 +73,17 @@ corepack pnpm turbo run build
 corepack pnpm --filter @vera/api cli migrate
 corepack pnpm --filter @vera/api cli bootstrap --org "LogaXP" --email you@example.com
 corepack pnpm --filter @vera/api dev                     # http://localhost:4000, OpenAPI at /openapi.json
+corepack pnpm --filter @vera/dashboard dev               # http://localhost:4100, the review queue
+corepack pnpm --filter @vera/site dev                    # http://localhost:4200, the landing page
 ```
+
+Three surfaces, deliberately separate:
+
+| | Port | Who it is for |
+|---|---|---|
+| **API** | 4000 | Adapters. `/v1/decide`, JWKS, OpenAPI. |
+| **Dashboard** | 4100 | Reviewers *with* an account. `/` is the queue; no session sends you to `/login`, where you paste the reviewer token `bootstrap` printed. `/r/<id>` is one decision. |
+| **Landing page** | 4200 | People who *do not* have an account. A single static file with no build step — in production it belongs on a different host from the app, not behind the app's auth middleware. |
 
 Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 
@@ -83,7 +93,7 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 2. Contracts: schemas, canonicalization, decision token — done (62 tests)
 3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
 4. Baselines, outcomes, second adapter — **done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`, `packages/adapters/openai-agents`; 235 tests).
-5. Hardening, dashboard v0 — **done** (redaction, the review queue, key rotation/revocation, tenant-signed class tables, the KMS signer per ADR-0005, and Slack review notifications per ADR-0006; 359 tests). Two things await credentials rather than code: the KMS path has not been run against a live key (`apps/api/scripts/kms-smoke.mjs`), and the Slack app needs its bot token installed.
+5. Hardening, dashboard v0 — **done** (redaction, the review queue, key rotation/revocation, tenant-signed class tables, the KMS signer per ADR-0005, and Slack review notifications per ADR-0006; 359 tests). The KMS path is **verified against a live key** and a real tenant signs through it. The Slack app is registered and awaits only its bot token.
 6. Design-partner packaging — **done** (Dockerfiles, one-command pilot stack, `vera-api doctor`, `docs/design-partner-pilot.md`, landing page; 391 tests).
 
 Days 1–10 also run the validation interviews (brief Appendix A); the day-10 gate decides whether Policy Pack 1 stays on coding agents.

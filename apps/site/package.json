@@ -1,0 +1,14 @@
+{
+  "name": "@vera/site",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The landing page. One static file, no build step — deployable to any static host.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "node -e \"process.stdout.write('static: nothing to build\\n')\"",
+    "typecheck": "node -e \"process.stdout.write('static: nothing to typecheck\\n')\"",
+    "test": "node -e \"process.stdout.write('static: no tests\\n')\""
+  }
+}

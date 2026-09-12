@@ -1,6 +1,6 @@
 # ADR-0005 — Key custody: the KMS boundary, rotation, and revocation
 
-**Status:** accepted (rotation, revocation, and the KMS backend implemented; the KMS path is unit-tested but not yet exercised against a live key) · 12 September 2026
+**Status:** accepted and **verified against a live KMS key** · 12 September 2026
 **Context:** threat T14 and SR-11. A valid EdDSA signature *is* an approval, so the tenant signing key is the highest-value asset VERA holds (asset A1 in the threat model). Until now it had no revocation path short of editing the database by hand.
 
 ## Decisions
@@ -70,4 +70,9 @@ Custody is a schema invariant, not a convention: `signing_keys` carries a `CHECK
 - Rotation is safe to do routinely and should be scheduled once there is anything to schedule it with.
 - Revocation is loud by design: the response reports exactly how many tokens it invalidated.
 - The parity check is a cheap tripwire for the most serious failure mode this system has.
-- The KMS path is proven by unit tests against a real Ed25519 key and by `apps/api/scripts/kms-smoke.mjs` against a live one. **The live run has not happened yet** — it needs the signing IAM user's access key. Until it does, treat "KMS works end to end" as expected rather than verified: the untested assumptions are AWS's response shapes, not our code.
+- **The live run has now happened** (12 September 2026, `apps/api/scripts/kms-smoke.mjs`). Every assumption that only AWS could settle held:
+  - `GetPublicKey` returns an `ECC_NIST_EDWARDS25519` key that converts to a usable `OKP/Ed25519` JWK.
+  - `ED25519_SHA_512` over a `RAW` message returns a **bare 64-byte signature**, not a DER-wrapped one. This was the assumption worth testing: a wrapped signature would have produced tokens that fail verification everywhere, presenting as a system-wide mystery rather than an error. The guard would have caught it; it did not need to.
+  - The IAM identity's three permissions are sufficient and nothing broader is required.
+  - A token refuses to verify against a changed command.
+- End to end on a real tenant: `register-kms-key` rotated `LogaXP Demo` onto the KMS key (the local key moved to `retiring`, so tokens already issued kept verifying), a `POST /v1/decide` returned a token stamped `kid: kms_2bae56fd…`, and that token verified offline against the tenant's published JWKS. `doctor` reports the custody as KMS.
