@@ -24,7 +24,13 @@ const env = Object.fromEntries(
     .filter((l) => l && !l.startsWith('#') && l.includes('='))
     .map((l) => {
       const i = l.indexOf('=');
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')];
+      return [
+        l.slice(0, i).trim(),
+        l
+          .slice(i + 1)
+          .trim()
+          .replace(/^["']|["']$/g, ''),
+      ];
     }),
 );
 
@@ -33,7 +39,12 @@ const keyArn = env.VERA_KMS_KEY_ARN;
 const accessKeyId = env.VERA_KMS_ACCESS_KEY_ID;
 const secretAccessKey = env.VERA_KMS_SECRET_ACCESS_KEY;
 
-const missing = Object.entries({ VERA_KMS_REGION: region, VERA_KMS_KEY_ARN: keyArn, VERA_KMS_ACCESS_KEY_ID: accessKeyId, VERA_KMS_SECRET_ACCESS_KEY: secretAccessKey })
+const missing = Object.entries({
+  VERA_KMS_REGION: region,
+  VERA_KMS_KEY_ARN: keyArn,
+  VERA_KMS_ACCESS_KEY_ID: accessKeyId,
+  VERA_KMS_SECRET_ACCESS_KEY: secretAccessKey,
+})
   .filter(([, v]) => !v)
   .map(([k]) => k);
 if (missing.length) {
@@ -75,20 +86,28 @@ const token = await issueDecisionToken(
 );
 step(2, `Sign          → ${token.length}-char JWS, bound to ${hash.slice(0, 20)}…`);
 
-const ok = await verifyDecisionToken(token, { keys: [publicJwk], revoked: [] }, {
-  tenant: 'smoke',
-  aud: 'adapter:smoke',
-  action_hash: hash,
-});
+const ok = await verifyDecisionToken(
+  token,
+  { keys: [publicJwk], revoked: [] },
+  {
+    tenant: 'smoke',
+    aud: 'adapter:smoke',
+    action_hash: hash,
+  },
+);
 if (!ok.ok) throw new Error(`verification failed: ${ok.code}`);
 step(3, `Verify        → ok, kid ${ok.kid}`);
 
 // The binding is the product, not the signature: a token must not verify against a different action.
-const tampered = await verifyDecisionToken(token, { keys: [publicJwk], revoked: [] }, {
-  tenant: 'smoke',
-  aud: 'adapter:smoke',
-  action_hash: actionHash({ ...action, arguments: { command: 'kubectl delete -f prod.yaml' } }),
-});
+const tampered = await verifyDecisionToken(
+  token,
+  { keys: [publicJwk], revoked: [] },
+  {
+    tenant: 'smoke',
+    aud: 'adapter:smoke',
+    action_hash: actionHash({ ...action, arguments: { command: 'kubectl delete -f prod.yaml' } }),
+  },
+);
 if (tampered.ok) throw new Error('a token verified against an action it was not issued for');
 step(4, `Rebind        → refused (${tampered.code}) when the command changes`);
 

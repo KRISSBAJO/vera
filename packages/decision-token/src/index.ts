@@ -13,6 +13,7 @@ import {
   TenantJwksSchema,
 } from '@vera/schemas';
 import {
+  CompactSign,
   type CryptoKey,
   createLocalJWKSet,
   decodeProtectedHeader,
@@ -21,7 +22,6 @@ import {
   importJWK,
   errors as joseErrors,
   jwtVerify,
-  CompactSign,
 } from 'jose';
 
 // ---------- keys ----------

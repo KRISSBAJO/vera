@@ -130,6 +130,8 @@ export interface EvaluationInput {
     baseline?: Record<string, CedarValueJson>;
     hints?: Record<string, CedarValueJson>;
     indirect_input: boolean;
+    /** VERA's own reading of the command disagreed with an argument the adapter sent. */
+    argument_mismatch?: boolean;
   };
 }
 
@@ -199,6 +201,7 @@ export function evaluate(set: CompiledPolicySet, input: EvaluationInput): Policy
       baseline: projectContext('baseline', input.context.baseline),
       hints: projectContext('hints', input.context.hints),
       indirect_input: input.context.indirect_input,
+      argument_mismatch: input.context.argument_mismatch ?? false,
     },
     schema: veraSchema,
     validateRequest: true,

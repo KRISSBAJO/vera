@@ -40,6 +40,8 @@ function run(request: DecideRequest, over: Partial<DecideInput> = {}) {
 }
 
 const codesOf = (r: ReturnType<typeof decide>) => r.reasonCodes.map((c) => c.code);
+const policyIdsOf = (r: ReturnType<typeof decide>) =>
+  r.reasonCodes.map((c) => (c as { policy_id?: string }).policy_id).filter(Boolean);
 
 describe('Appendix C through the whole engine', () => {
   it('push to a feature branch → ALLOW, 10-minute expiry, no review', () => {
@@ -273,5 +275,107 @@ describe('SR-09 routing', () => {
       },
     );
     expect(r.review?.quorum).toBe(2);
+  });
+});
+
+describe('T03: the command outranks what the adapter said about it', () => {
+  /** Target whose branch is the default one, so a real force push must be forbidden. */
+  const onMain = { kind: 'repository' as const, id: 'logaxp/hearken', default_branch: 'main' };
+
+  it('blocks a force push the adapter forgot to flag — the bug that started this', () => {
+    // A raw client that sends only the command, with no derived `force` at all. Before the service
+    // derived it, this fell through to the non-force permit and returned ALLOW.
+    const r = run(
+      req({
+        target: onMain,
+        context: { branch: 'main' },
+        action: { arguments: { command: 'git push --force origin main' } },
+      }),
+    );
+    expect(r.decision).toBe('BLOCK');
+    expect(policyIdsOf(r)).toContain('no-force-push-to-default');
+  });
+
+  it('blocks a force push the adapter actively denied, and says the two disagreed', () => {
+    const r = run(
+      req({
+        target: onMain,
+        context: { branch: 'main' },
+        action: { arguments: { command: 'git push --force origin main', force: false } },
+      }),
+    );
+    expect(r.decision).toBe('BLOCK');
+    expect(policyIdsOf(r)).toContain('no-force-push-to-default');
+    expect(codesOf(r)).toContain('ACTION.ARGUMENT_MISMATCH');
+    const mismatch = r.reasonCodes.find((c) => c.code === 'ACTION.ARGUMENT_MISMATCH');
+    expect(mismatch?.severity).toBe('high');
+    expect(mismatch?.detail).toContain('adapter sent false');
+  });
+
+  it('does not fire on an adapter that agrees with the command', () => {
+    const r = run(
+      req({
+        target: onMain,
+        context: { branch: 'main' },
+        action: { arguments: { command: 'git push --force origin main', force: true } },
+      }),
+    );
+    expect(codesOf(r)).not.toContain('ACTION.ARGUMENT_MISMATCH');
+    expect(r.decision).toBe('BLOCK');
+  });
+
+  it('an adapter cannot invent a force push either — the correction runs both ways', () => {
+    const r = run(
+      req({
+        action: { arguments: { command: 'git push origin feature/x', force: true } },
+      }),
+    );
+    expect(codesOf(r)).toContain('ACTION.ARGUMENT_MISMATCH');
+    // The command settles it as not forced, so the force-push rules must not apply...
+    expect(policyIdsOf(r)).not.toContain('force-push-non-default-requires-review');
+    // ...but a runtime that misdescribes an action still gets a human.
+    expect(r.decision).toBe('REVIEW');
+    expect(policyIdsOf(r)).toContain('argument-mismatch-requires-review');
+  });
+
+  it('a disagreement about the branch is caught too', () => {
+    const r = run(
+      req({
+        target: onMain,
+        action: { arguments: { command: 'git push origin main', branch: 'feature/x' } },
+      }),
+    );
+    const mismatch = r.reasonCodes.find((c) => c.code === 'ACTION.ARGUMENT_MISMATCH');
+    expect(mismatch?.detail).toContain('branch');
+  });
+
+  it('stays quiet when the command genuinely does not settle the question', () => {
+    // `git push $FLAGS` may or may not be forced. The adapter can see its own shell; we cannot, so
+    // its assertion stands and there is nothing to disagree about.
+    const r = run(
+      req({
+        target: onMain,
+        context: { branch: 'main' },
+        action: { arguments: { command: 'git push $FLAGS origin main', force: false } },
+      }),
+    );
+    expect(codesOf(r)).not.toContain('ACTION.ARGUMENT_MISMATCH');
+    // It is still indirect input, which is its own signal.
+    expect(codesOf(r)).toContain('ACTION.INDIRECT_INPUT');
+  });
+
+  it('applies the corrected value to whichever rule it reaches, not only the forbid', () => {
+    // Same denied force flag, but pushed from a feature branch: the forbid is about the default
+    // branch, so the correct landing place is the force-push REVIEW rule rather than BLOCK.
+    const r = run(
+      req({
+        target: onMain,
+        context: { branch: 'feature/x' },
+        action: { arguments: { command: 'git push --force origin feature/x', force: false } },
+      }),
+    );
+    expect(r.decision).toBe('REVIEW');
+    expect(policyIdsOf(r)).toContain('force-push-non-default-requires-review');
+    expect(codesOf(r)).toContain('ACTION.ARGUMENT_MISMATCH');
   });
 });

@@ -12,10 +12,29 @@
  * v2 (2026-09-11, first dogfood session): added non-production permits for http.mutation and
  * message.send, and a production REVIEW for both. Without them a coding agent on a laptop could not
  * click a browser button or publish an artifact — every such call fell to POLICY.DEFAULT_DENY.
+ *
+ * v3 (2026-09-12): added \`argument-mismatch-requires-review\`, after finding that the force-push
+ * rules below turned on \`context.args.force\` — a boolean the adapter derived and asserted. The
+ * service now derives it too and its own reading wins, so those rules are sound again; this policy
+ * covers the remaining question of an adapter that described the action differently from how the
+ * action reads.
  */
-export const POLICY_PACK_1_VERSION = 2;
+export const POLICY_PACK_1_VERSION = 3;
 
 export const POLICY_PACK_1 = `
+// ---- integrity of the request itself ----
+
+// REVIEW rather than BLOCK, deliberately. VERA already used its own reading of the command, so the
+// decision is made on the truth either way; what remains is a runtime that disagreed with it. That is
+// what evasion looks like, but it is also what an out-of-date adapter looks like, and forbidding
+// outright would take a fleet offline on a version skew — which is how a security control gets
+// switched off. A human sees both readings and decides. Most-restrictive-wins still applies, so an
+// action another policy forbids stays BLOCK.
+@id("argument-mismatch-requires-review")
+@vera_effect("review")
+permit(principal, action, resource)
+when { context.argument_mismatch == true };
+
 // ---- version control ----
 
 @id("vcs-push-non-force")

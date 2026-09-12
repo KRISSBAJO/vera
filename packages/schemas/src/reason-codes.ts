@@ -216,6 +216,14 @@ export const REASON_CODES = {
     description: 'The shell command could not be classified into a more specific action class.',
     guidance: 'Read the command. The classifier could not.',
   },
+  'ACTION.ARGUMENT_MISMATCH': {
+    category: 'ACTION',
+    defaultSeverity: 'high',
+    description:
+      'A policy-visible argument sent by the adapter contradicts what the command itself says. VERA used its own reading.',
+    guidance:
+      'The runtime described the action differently from how the action reads. Treat the adapter as untrustworthy or broken until explained: a mismatch here is what deliberate class evasion looks like.',
+  },
 
   // --- Identity ---
   'IDENTITY.ASSERTED': {

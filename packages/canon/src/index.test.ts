@@ -5,6 +5,7 @@ import {
   analyzeShell,
   canonicalAction,
   canonicalString,
+  deriveShellArgs,
   isActionHash,
   normalizeValue,
 } from './index.js';
@@ -180,5 +181,59 @@ describe('T02 analyzeShell', () => {
       'variable expansion',
       'command substitution $(…)',
     ]);
+  });
+});
+
+describe('T03 deriveShellArgs — what the command settles, not what the adapter says', () => {
+  const force = (cmd: string) => deriveShellArgs(cmd).force;
+
+  it('reads every spelling of a force push', () => {
+    expect(force('git push --force origin main')).toBe(true);
+    expect(force('git push -f origin main')).toBe(true);
+    expect(force('git push --force-with-lease origin main')).toBe(true);
+    expect(force('git push --force-with-lease=main:abc123 origin main')).toBe(true);
+    // A leading + on the refspec is a force push that mentions no flag at all.
+    expect(force('git push origin +main')).toBe(true);
+    expect(force('git push origin +feature:main')).toBe(true);
+  });
+
+  it('does not mistake a lookalike for a force flag', () => {
+    expect(force('git push origin forced-branch')).toBe(false);
+    expect(force('git push origin main --dry-run')).toBe(false);
+    expect(force('git push --set-upstream origin feature/x')).toBe(false);
+    // A branch literally named "-f"-ish, as a value rather than a flag.
+    expect(force('git push origin refs/heads/f')).toBe(false);
+  });
+
+  it('says nothing at all about commands that are not a git push', () => {
+    expect(deriveShellArgs('kubectl apply -f prod.yaml')).toEqual({});
+    expect(deriveShellArgs('rm -f /tmp/x')).toEqual({});
+    // `-f` there means --filename; claiming force:false would be equally wrong as claiming true.
+    expect(deriveShellArgs('ls')).toEqual({});
+  });
+
+  it('declines to claim "not forced" when the command resolves at runtime', () => {
+    // `$FLAGS` may well be `--force`. Reporting a confident false here would overwrite a correct
+    // assertion with a wrong one — worse than staying silent.
+    expect(force('git push $FLAGS origin main')).toBeUndefined();
+    expect(force('git push $(cat flags) origin main')).toBeUndefined();
+    // But an explicit --force is still readable even beside an expansion.
+    expect(force('git push --force $REMOTE main')).toBe(true);
+  });
+
+  it('derives the destination ref only when the command names one', () => {
+    expect(deriveShellArgs('git push origin main').branch).toBe('main');
+    expect(deriveShellArgs('git push origin feature/x:main').branch).toBe('main');
+    expect(deriveShellArgs('git push origin +main').branch).toBe('main');
+    expect(deriveShellArgs('git push origin refs/heads/main').branch).toBe('main');
+    // No refspec: the branch comes from local git state, which the service cannot see.
+    expect(deriveShellArgs('git push').branch).toBeUndefined();
+    expect(deriveShellArgs('git push origin').branch).toBeUndefined();
+    expect(deriveShellArgs('git push $BRANCH_REF').branch).toBeUndefined();
+  });
+
+  it('finds a git push that is not the first command on the line', () => {
+    expect(force('cd repo && git push --force origin main')).toBe(true);
+    expect(force('npm test; git push -f origin main')).toBe(true);
   });
 });

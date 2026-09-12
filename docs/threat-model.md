@@ -92,6 +92,12 @@ Format: **ID — title.** Attack → impact → mitigations (V1 required unless 
 - The class table is **tenant-signed configuration served by VERA**, not something the agent process can edit (T19 shares this control).
 - Unknown tool → `unknown.consequential` class → tenant default (BLOCK or REVIEW), never ALLOW.
 - Shell classification is a heuristic and is treated as one: it can *raise* class (detect `DROP`, `rm -rf`, `--force`) but a benign classification of a shell string yields at most `shell.exec` with `ACTION.UNCLASSIFIED_SHELL`, which Policy Pack 1 routes to REVIEW in production environments.
+- **Argument-level evasion (found 12 September 2026, fixed).** The class is not the only thing the runtime asserts: Policy Pack 1's force-push rules turned on `context.args.force`, a boolean the *adapter* derived from the command and sent. A modified or simply out-of-date adapter could send `force: false` beside a `--force` command and `no-force-push-to-default` would never fire — a consequential decision resting on an asserted fact, which is exactly what the rest of the system refuses to permit. Found by hand-sending a raw `/v1/decide` while testing the pilot stack; no adapter test would have caught it, because every adapter test goes through the honest adapter.
+  - The derivation now lives in `@vera/canon` — the package the service and the adapters already share for `action_hash` — and **the service runs it on the command it was given**. Where VERA's own reading settles a policy-visible argument, that reading is used and the adapter's is only a claim to be checked against it.
+  - A key is derived only when the command *settles* it. `git push $FLAGS origin main` yields no `force` at all, because a confident `false` there would overwrite a correct assertion with a wrong one; absent is not `false`.
+  - Disagreement emits `ACTION.ARGUMENT_MISMATCH` (high) and sets `context.argument_mismatch`, which Policy Pack 1 v3 routes to REVIEW for every class. REVIEW rather than BLOCK deliberately: the decision is already made on VERA's reading either way, and forbidding outright would take a fleet offline on an adapter version skew — which is how a security control gets switched off.
+  - The adapters import the same function, so an honest adapter cannot trip the alarm by accident and a dishonest one is the only thing that can.
+  - The action hash is untouched: it is still over the exact bytes the tool receives. Only what policy is shown changes.
 - Multi-step laundering is an **accepted V1 limitation** (§5). Session-level baselines *(later)* flag write-then-execute patterns.
 - Test: corpus of 50 evasive commands; none reaches ALLOW under Policy Pack 1 in `production`.
 
@@ -231,6 +237,7 @@ These become acceptance tests; the ID appears in the test name.
 | SR-01 | Adapter-supplied evidence is `asserted` and cannot clear a `PREREQ.*` code | T08 | asserted `backup.verified` leaves the code |
 | SR-02 | `action_hash` is JCS over a fixed field set with byte-exact values; adapters recompute at execution | T02 | property tests + post-exec mismatch event |
 | SR-03 | Unknown tools and unclassified shell in production cannot ALLOW | T03 | evasion corpus |
+| SR-23 | Policy-visible arguments the command settles are derived by the service, not taken from the adapter; disagreement cannot ALLOW | T03 | denied-`--force` test at the HTTP boundary |
 | SR-04 | Untrusted fields render as plain text in a labeled region | T04, T23 | markup-in-argument test |
 | SR-05 | LLM outputs can add codes but never remove or downgrade | T05 | steering-text test |
 | SR-06 | Time features use server time + tenant timezone | T11 | spoofed `local_time` test |

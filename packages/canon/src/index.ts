@@ -107,3 +107,59 @@ export function analyzeShell(command: string): ShellAnalysis {
   const constructs = INDIRECT_PATTERNS.filter(([, re]) => re.test(command)).map(([name]) => name);
   return { indirect: constructs.length > 0, constructs };
 }
+
+// ---------- derived policy arguments (threat T03: argument-level class evasion) ----------
+
+/**
+ * Policy-visible facts read out of the command string itself.
+ *
+ * Policy Pack 1 decides a force push on `context.args.force`. If that boolean only ever arrived from
+ * the adapter, it would be an *asserted* fact deciding a consequential action — precisely what the
+ * rest of the system refuses to allow. A modified or buggy adapter could send `force: false` beside a
+ * `--force` command and the rule would never fire.
+ *
+ * So the derivation lives here, in the package both sides already share for `action_hash`, and the
+ * service runs it on the command it was given. One implementation, so the two cannot drift apart, and
+ * the server's reading is a fact it established rather than one it was handed.
+ *
+ * A key is present only when the command **settles** it. Absent means "this command does not say",
+ * which is different from `false` and must not be flattened into it.
+ */
+export interface DerivedArgs {
+  force?: boolean;
+  branch?: string;
+}
+
+/** `-f`, `--force`, `--force-with-lease[=…]`, or a `+refspec`, as a whole token. */
+const FORCE_FLAG = /(?:^|\s)(?:-f|--force|--force-with-lease(?:=\S*)?)(?=\s|$)/;
+const FORCE_REFSPEC = /(?:^|\s)\+\S+/;
+
+export function deriveShellArgs(command: string): DerivedArgs {
+  const push = /(?:^|[\s;&|])git\s+push\b(.*)$/.exec(command);
+  if (!push) return {};
+  const rest = push[1] ?? '';
+  const derived: DerivedArgs = {};
+
+  const forced = FORCE_FLAG.test(rest) || FORCE_REFSPEC.test(rest);
+  if (forced) {
+    derived.force = true;
+  } else if (!analyzeShell(rest).indirect) {
+    // Only claim `false` when nothing in the command resolves at runtime. `git push $FLAGS origin main`
+    // may well be a force push; reporting it as definitely-not would be worse than saying nothing,
+    // because it would overwrite a correct assertion with a confident wrong one.
+    derived.force = false;
+  }
+
+  // The destination ref, when the command names one. `git push origin` alone takes the branch from
+  // local git state, which the service cannot see — so it stays unset rather than guessed.
+  const positional = rest
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t && !t.startsWith('-'));
+  if (positional.length >= 2) {
+    const last = positional.at(-1)?.replace(/^\+/, '');
+    const dst = last?.includes(':') ? last.split(':').at(-1) : last;
+    if (dst && !analyzeShell(dst).indirect) derived.branch = dst.replace(/^refs\/heads\//, '');
+  }
+  return derived;
+}

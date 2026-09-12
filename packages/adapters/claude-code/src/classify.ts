@@ -1,3 +1,4 @@
+import { deriveShellArgs } from '@vera/canon';
 import { type ActionClass, isConsequential } from '@vera/schemas';
 
 /**
@@ -135,23 +136,26 @@ function targetsProduction(command: string): boolean {
   return targets.some((t) => PROD_TARGET.test(t));
 }
 
+/**
+ * Read a `git push` the way the service will.
+ *
+ * `force` and the destination ref come from `@vera/canon`, the same function the decision service
+ * runs on the command it receives. This is not deduplication for tidiness: if the adapter had its own
+ * reading, the two could disagree, and a disagreement is reported as `ACTION.ARGUMENT_MISMATCH` and
+ * treated as evasion. Sharing the implementation means an honest adapter cannot trip that alarm by
+ * accident, and a dishonest one is the only thing left that can.
+ *
+ * Only the branch fallback is ours: `git push origin` with no refspec takes the branch from local git
+ * state, which the adapter can see and the service cannot.
+ */
 function gitPush(
   command: string,
   git: GitFacts | undefined,
 ): { force: boolean; branch: string | undefined } | null {
-  const m = command.match(/\bgit\s+push\b(.*)/);
-  if (!m) return null;
-  const rest = m[1] ?? '';
-  const force = /(\s|^)(-f|--force|--force-with-lease(=\S*)?)(\s|$)/.test(rest) || /\s\+\S+/.test(rest);
-  // Last positional token is the refspec: `branch`, `src:dst`, or just the remote.
-  const tokens = rest
-    .trim()
-    .split(/\s+/)
-    .filter((t) => t && !t.startsWith('-'));
-  const last = tokens.at(-1)?.replace(/^\+/, '');
-  const dst = last?.includes(':') ? last.split(':').at(-1) : last;
-  const looksLikeRemoteOnly = !dst || tokens.length < 2 || /^(origin|upstream)$/.test(dst);
-  return { force, branch: looksLikeRemoteOnly ? git?.branch : dst };
+  if (!/\bgit\s+push\b/.test(command)) return null;
+  const derived = deriveShellArgs(command);
+  const remoteOnly = !derived.branch || /^(origin|upstream)$/.test(derived.branch);
+  return { force: derived.force ?? false, branch: remoteOnly ? git?.branch : derived.branch };
 }
 
 export function classify(

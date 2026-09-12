@@ -9,7 +9,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `docs/brief-v2.md` | Product and build spec (September 2026). Start here. |
 | `docs/design-partner-pilot.md` | What a pilot involves: scope, what is stored, what happens when it breaks, what is not production-ready, and how we both judge whether it worked. |
 | `docs/competitive-scan-2026-09.md` | Landscape scan behind the brief's §2 — ~75 sources. |
-| `docs/threat-model.md` | Build deliverable 1: trust boundaries, threats T01–T25, security requirements SR-01–SR-22, accepted risks, open questions. |
+| `docs/threat-model.md` | Build deliverable 1: trust boundaries, threats T01–T25, security requirements SR-01–SR-23, accepted risks, open questions. |
 | `docs/boundary-and-assumptions.md` | Build deliverable 1: the product boundary restated, and 17 unsafe or ambiguous assumptions found in the brief with resolutions. |
 | `docs/decisions/` | Architecture decision records: 0001 tech stack, 0002 Claude Code adapter shape, 0003 per-user keys, 0004 Cedar closed records, 0005 key custody, 0006 Slack notifications not approvals. |
 | `docs/word/` | Word exports of the above, generated from the markdown — never edited by hand. |
@@ -19,7 +19,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | Package | What it is |
 |---|---|
 | `packages/schemas` | zod schemas for every wire object; reason-code registry; action-class taxonomy; `pnpm export` writes JSON Schema to `json-schema/`. |
-| `packages/canon` | Canonical action form and `action_hash` (RFC 8785 + SHA-256); shell indirect-input analysis. Shared byte-for-byte with adapters. |
+| `packages/canon` | Canonical action form and `action_hash` (RFC 8785 + SHA-256); shell indirect-input analysis; derivation of policy-visible arguments the command settles (SR-23). Shared byte-for-byte with adapters. |
 | `packages/decision-token` | Issue/verify EdDSA decision tokens bound to an action hash; tenant JWKS with revocation; single-use registry. |
 | `packages/policy-engine` | Cedar: compile a policy set keyed by `@id`, validate strictly against the VERA schema, evaluate with closed-record context projection, map to ALLOW / REVIEW / BLOCK / NO_MATCH. Ships Policy Pack 1. |
 | `packages/db` | Postgres schema (Drizzle) + migrations with FORCE row-level security, tenant-scoped client, hash-chained append-only audit, key sealing. |
@@ -29,6 +29,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `apps/api` | Fastify: `/v1/decide`, `/v1/decisions/:id` (+ approve / reject / outcome), `/v1/tokens/consume`, `/v1/audit-events`, tenant JWKS, `/openapi.json`. CLI: `migrate`, `bootstrap`, `add-user`, `serve`. |
 | `packages/adapters/core` | Shared adapter runtime: HTTP client, offline token verification, and the REVIEW hold loop. One implementation of the security-critical path. Apache-2.0. |
 | `packages/adapters/claude-code` | `vera-hook`: the Claude Code command hook (ADR-0002). `pre` asks VERA and verifies tokens; `post` recomputes the hash and reports outcomes; `init` writes config and hooks; `status`. Apache-2.0. |
+| `apps/site` | Landing page: a single static file, no build step. |
 | `apps/dashboard` | The review queue (Next.js): triage list, decision detail with quarantined agent text, approve/reject with rationale, audited reveal of redacted values. |
 | `packages/redaction` | Masks credentials in tool arguments before storage, display, or any model call (SR-15). |
 | `packages/adapters/openai-agents` | `createVeraGuard()` for the OpenAI Agents SDK: `protect(tool, spec)` enforces (decide → verify token → run), `needsApproval()` feeds the SDK's own interruption flow. Apache-2.0. |
@@ -83,6 +84,6 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
 4. Baselines, outcomes, second adapter — **done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`, `packages/adapters/openai-agents`; 235 tests).
 5. Hardening, dashboard v0 — **done** (redaction, the review queue, key rotation/revocation, tenant-signed class tables, the KMS signer per ADR-0005, and Slack review notifications per ADR-0006; 359 tests). Two things await credentials rather than code: the KMS path has not been run against a live key (`apps/api/scripts/kms-smoke.mjs`), and the Slack app needs its bot token installed.
-6. Design-partner packaging — in progress
+6. Design-partner packaging — **done** (Dockerfiles, one-command pilot stack, `vera-api doctor`, `docs/design-partner-pilot.md`, landing page; 391 tests).
 
 Days 1–10 also run the validation interviews (brief Appendix A); the day-10 gate decides whether Policy Pack 1 stays on coding agents.

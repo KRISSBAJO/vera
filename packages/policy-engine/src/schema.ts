@@ -84,6 +84,12 @@ const contextType = record({
   baseline: record(BASELINE_ATTRIBUTES),
   hints: record(HINT_ATTRIBUTES),
   indirect_input: { type: 'Boolean' },
+  /**
+   * True when a policy-visible argument the adapter sent contradicts VERA's own reading of the
+   * command. Sits beside `indirect_input` rather than inside `args` because, like it, the service
+   * derived it — nothing in here came from the runtime.
+   */
+  argument_mismatch: { type: 'Boolean' },
 });
 
 const resourceShape = record({

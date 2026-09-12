@@ -1,4 +1,4 @@
-import { analyzeShell } from '@vera/canon';
+import { analyzeShell, deriveShellArgs } from '@vera/canon';
 import { type CompiledPolicySet, evaluate } from '@vera/policy-engine';
 import {
   type DecideRequest,
@@ -96,6 +96,35 @@ export function decide(input: DecideInput): DecideOutput {
   // --- action analysis ---
   const command = typeof args.command === 'string' ? args.command : undefined;
   const shell = command ? analyzeShell(command) : { indirect: false, constructs: [] };
+
+  // --- policy arguments: what VERA reads out of the command beats what the adapter said (T03) ---
+  //
+  // `context.args` decides real outcomes — Policy Pack 1's force-push rules read `args.force`. Taking
+  // that boolean on trust would make a consequential decision turn on an asserted fact, which is the
+  // one thing this system does not do anywhere else. So the service derives what the command settles
+  // and uses its own answer; the adapter's version is only ever a claim to be checked against it.
+  //
+  // The action hash is untouched: it is still over the exact arguments the tool will receive. This
+  // changes only what policy is allowed to see.
+  const derived = command ? deriveShellArgs(command) : {};
+  const policyArgs: Record<string, unknown> = { ...args };
+  const disagreements: string[] = [];
+  for (const [key, ours] of Object.entries(derived)) {
+    const theirs = args[key];
+    if (theirs !== undefined && theirs !== ours) {
+      disagreements.push(
+        `${key}: adapter sent ${JSON.stringify(theirs)}, the command says ${JSON.stringify(ours)}`,
+      );
+    }
+    policyArgs[key] = ours;
+  }
+  if (disagreements.length > 0) {
+    codes.push({
+      code: 'ACTION.ARGUMENT_MISMATCH',
+      severity: 'high',
+      detail: disagreements.join('; '),
+    });
+  }
   const isProd = action.environment === 'production';
   if (shell.indirect)
     codes.push({
@@ -165,11 +194,12 @@ export function decide(input: DecideInput): DecideOutput {
         : {}),
     },
     context: {
-      args: args as Record<string, never>,
+      args: policyArgs as Record<string, never>,
       evidence: projectEvidence(verified),
       asserted: projectEvidence(asserted),
       hints: action.hints ?? {},
       indirect_input: shell.indirect,
+      argument_mismatch: disagreements.length > 0,
     },
   });
   codes.push(...policy.reasonCodes);
