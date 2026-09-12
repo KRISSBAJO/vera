@@ -1,8 +1,8 @@
+import { resolveDecision } from '@vera/adapter-core';
 import { actionHash } from '@vera/canon';
-import { verifyDecisionToken } from '@vera/decision-token';
 import { type DecideRequest, isConsequential } from '@vera/schemas';
 import { type Classified, classify, type GitFacts } from './classify.js';
-import { type DecisionStatus, type VeraClient, VeraRejected, VeraUnreachable } from './client.js';
+import { type VeraClient, VeraRejected, VeraUnreachable } from './client.js';
 import type { AdapterConfig } from './config.js';
 import {
   type PostToolUseInput,
@@ -148,87 +148,30 @@ export async function runPre(
         );
   }
 
-  if (res.action_hash !== hash) {
-    await remember('BLOCK', 'deny', res.decision_id);
-    return preOutput(
-      'deny',
-      `VERA's action hash differs from the adapter's (canonicalization mismatch) — refusing (TOKEN.HASH_MISMATCH)`,
-    );
-  }
-
-  if (res.decision === 'BLOCK') {
-    await remember('BLOCK', 'deny', res.decision_id);
-    return preOutput('deny', `VERA BLOCK ${res.decision_id}: ${codesLine(res)}`);
-  }
-
-  if (res.decision === 'ALLOW') {
-    const ok = await verifyToken(deps, cfg, res.decision_token, hash);
-    if (!ok.ok) {
-      await remember('BLOCK', 'deny', res.decision_id);
-      return preOutput(
-        'deny',
-        `VERA ALLOW ${res.decision_id} but the token did not verify (${ok.code}) — refusing`,
-      );
-    }
-    await remember('ALLOW', 'allow', res.decision_id);
-    return preOutput(
-      'allow',
-      `VERA ALLOW ${res.decision_id} (${res.policy_set_version})${codesLine(res) ? ` — ${codesLine(res)}` : ''}`,
-    );
-  }
-
-  // REVIEW: hold while a human decides, polling GET /v1/decisions/:id.
-  deps.log(
-    `VERA REVIEW ${res.decision_id}: ${codesLine(res)}\n  waiting for approval: ${res.review?.url ?? ''}`,
+  // Ask, verify, and — on REVIEW — hold for a human. The flow itself lives in @vera/adapter-core so
+  // every adapter verifies tokens the same way; only the mapping onto hook decisions is local.
+  const resolution = await resolveDecision(
+    res,
+    { client: deps.client, sleep: deps.sleep, now: deps.now, log: deps.log },
+    { org: cfg.org, aud: cfg.aud },
+    hash,
+    { holdSeconds: cfg.holdSeconds, pollIntervalMs: cfg.pollIntervalMs },
   );
-  const deadline = deps.now() + cfg.holdSeconds * 1000;
-  let last: DecisionStatus | undefined;
-  while (deps.now() < deadline) {
-    try {
-      last = await deps.client.getDecision(res.decision_id);
-    } catch (e) {
-      if (e instanceof VeraRejected) break;
-      // transient: keep polling until the deadline
-    }
-    if (last?.review_status === 'approved' && last.decision_token) {
-      const ok = await verifyToken(deps, cfg, last.decision_token, hash);
-      if (!ok.ok) {
-        await remember('BLOCK', 'deny', res.decision_id);
-        return preOutput('deny', `approved, but the token did not verify (${ok.code}) — refusing`);
-      }
-      await remember('REVIEW', 'allow', res.decision_id);
-      return preOutput('allow', `VERA REVIEW ${res.decision_id} approved — token verified`);
-    }
-    if (last?.review_status === 'rejected') {
-      await remember('REVIEW', 'deny', res.decision_id);
-      return preOutput('deny', `VERA REVIEW ${res.decision_id} rejected by a reviewer`);
-    }
-    if (last?.review_status === 'expired') break;
-    await deps.sleep(cfg.pollIntervalMs);
+
+  if (resolution.kind === 'allow') {
+    await remember(res.decision === 'ALLOW' ? 'ALLOW' : 'REVIEW', 'allow', res.decision_id);
+    return preOutput('allow', resolution.reason);
+  }
+  if (resolution.kind === 'deny') {
+    await remember(res.decision === 'REVIEW' ? 'REVIEW' : 'BLOCK', 'deny', res.decision_id);
+    return preOutput('deny', resolution.reason);
   }
   await remember('REVIEW', cfg.onHoldExpiry, res.decision_id);
   return preOutput(
     cfg.onHoldExpiry,
-    `VERA REVIEW ${res.decision_id} not resolved within ${cfg.holdSeconds}s (SYSTEM.HOLD_EXPIRED); no token issued`,
+    resolution.reason,
     `VERA review ${res.decision_id} is still pending: ${res.review?.url ?? ''}. Whatever you decide here is recorded as a keyboard decision, not a VERA one.`,
   );
-}
-
-async function verifyToken(deps: HookDeps, cfg: AdapterConfig, token: string | null, hash: string) {
-  if (!token) return { ok: false as const, code: 'TOKEN.MALFORMED' };
-  let jwks: Awaited<ReturnType<VeraClient['jwks']>>;
-  try {
-    jwks = await deps.client.jwks();
-  } catch (e) {
-    return { ok: false as const, code: `JWKS_UNAVAILABLE (${e instanceof Error ? e.message : e})` };
-  }
-  const v = await verifyDecisionToken(token, jwks, {
-    tenant: cfg.org,
-    aud: cfg.aud,
-    action_hash: hash,
-    now: new Date(deps.now()),
-  });
-  return v.ok ? { ok: true as const } : { ok: false as const, code: v.code };
 }
 
 /**

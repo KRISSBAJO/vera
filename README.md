@@ -26,7 +26,9 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `packages/baseline-engine` | Per-organisation behavioural baselines: novelty, time-of-day, magnitude, bursts. Deterministic, explainable, add-severity-only. |
 | `packages/evidence` | Evidence providers (Proof): facts VERA fetches itself, under a budget. GitHub PR approval, checks, migrations. |
 | `apps/api` | Fastify: `/v1/decide`, `/v1/decisions/:id` (+ approve / reject / outcome), `/v1/tokens/consume`, `/v1/audit-events`, tenant JWKS, `/openapi.json`. CLI: `migrate`, `bootstrap`, `add-user`, `serve`. |
+| `packages/adapters/core` | Shared adapter runtime: HTTP client, offline token verification, and the REVIEW hold loop. One implementation of the security-critical path. Apache-2.0. |
 | `packages/adapters/claude-code` | `vera-hook`: the Claude Code command hook (ADR-0002). `pre` asks VERA and verifies tokens; `post` recomputes the hash and reports outcomes; `init` writes config and hooks; `status`. Apache-2.0. |
+| `packages/adapters/openai-agents` | `createVeraGuard()` for the OpenAI Agents SDK: `protect(tool, spec)` enforces (decide → verify token → run), `needsApproval()` feeds the SDK's own interruption flow. Apache-2.0. |
 
 ## Put it in front of Claude Code
 
@@ -62,7 +64,7 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 1. Threat model + boundary restatement + assumptions — done (v2.1 of the brief applies its fixes)
 2. Contracts: schemas, canonicalization, decision token — done (62 tests)
 3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
-4. Baselines, outcomes, second adapter — **baselines and the outcome loop done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`). Remaining: the OpenAI Agents SDK adapter.
+4. Baselines, outcomes, second adapter — **done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`, `packages/adapters/openai-agents`; 235 tests).
 5. Hardening, dashboard v0
 6. Design-partner packaging
 

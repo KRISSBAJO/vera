@@ -1,14 +1,11 @@
 {
-  "name": "@vera/adapter-claude-code",
+  "name": "@vera/adapter-core",
   "version": "0.1.0",
-  "description": "vera-hook: Claude Code command hook that asks VERA before consequential tool calls (PreToolUse) and reports outcomes (PostToolUse)",
+  "description": "Shared adapter runtime: VERA HTTP client, offline token verification, and the REVIEW hold loop. Verifies tokens; never issues them.",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "vera-hook": "./dist/cli.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -24,7 +21,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@vera/adapter-core": "workspace:*",
     "@vera/canon": "workspace:*",
     "@vera/decision-token": "workspace:*",
     "@vera/schemas": "workspace:*",
@@ -32,8 +28,6 @@
   },
   "devDependencies": {
     "@types/node": "^22",
-    "@vera/api": "workspace:*",
-    "@vera/db": "workspace:*",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   }

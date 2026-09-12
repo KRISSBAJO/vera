@@ -1,14 +1,11 @@
 {
-  "name": "@vera/adapter-claude-code",
+  "name": "@vera/adapter-openai-agents",
   "version": "0.1.0",
-  "description": "vera-hook: Claude Code command hook that asks VERA before consequential tool calls (PreToolUse) and reports outcomes (PostToolUse)",
+  "description": "Ask VERA before an OpenAI Agents SDK tool runs: wrap the tool, or supply needsApproval. Verifies the decision token before executing.",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "vera-hook": "./dist/cli.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -26,9 +23,7 @@
   "dependencies": {
     "@vera/adapter-core": "workspace:*",
     "@vera/canon": "workspace:*",
-    "@vera/decision-token": "workspace:*",
-    "@vera/schemas": "workspace:*",
-    "zod": "^4.6.2"
+    "@vera/schemas": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",
