@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import swagger from '@fastify/swagger';
+import { evaluateBaselines, localParts, magnitudeOf } from '@vera/baseline-engine';
 import { actionHash } from '@vera/canon';
 import { appendAudit, newId, schema, type Tx, type VeraDb } from '@vera/db';
 import { decide, type TenantConfig } from '@vera/decision-engine';
@@ -24,7 +25,15 @@ import {
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { requireApiKey, requireReviewer } from './auth.js';
+import {
+  lookupBaselines,
+  rebuildSnapshot,
+  rebuildSnapshotIfStale,
+  recordObservation,
+  retractObservation,
+} from './baselines.js';
 import { conflict, forbidden, HttpError, notFound } from './errors.js';
+import { baselineExplain, policyPrecision } from './reports.js';
 import {
   activePolicySet,
   issueAndRecordToken,
@@ -52,6 +61,8 @@ export interface AppDeps extends ServiceContext {
   /** Evidence providers (Proof engine). Each runs under `evidenceBudgetMs`; late ones are EVIDENCE.MISSING. */
   evidenceProviders?: EvidenceProvider[];
   evidenceBudgetMs?: number;
+  /** How stale a baseline rollup may get before the next outcome rebuilds it. */
+  baselineSnapshotMaxAgeMs?: number;
 }
 
 const ErrorSchema = z.object({
@@ -226,6 +237,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           budgetMs: deps.evidenceBudgetMs ?? 1500,
         });
 
+        // Baselines: what this organisation has actually done before. Read from the newest materialised
+        // snapshot (never computed here — that is what keeps the p95 budget and reproducibility).
+        const lookup = await lookupBaselines(
+          tx,
+          key.orgId,
+          body.actor,
+          body.action.class,
+          body.target?.id ?? '-',
+        );
+        const baselineCodes = evaluateBaselines({
+          localHour: localParts(now, org.timezone).hour,
+          magnitude: magnitudeOf(body.action.arguments),
+          lookup,
+        });
+
         const out = decide({
           request: body,
           tenant,
@@ -233,6 +259,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           policySetVersion: ps.version,
           verifiedEvidence: gathered.evidence,
           missingEvidence: gathered.missing,
+          baselineCodes,
           keyOwner: { id: key.ownerUserId, kind: key.ownerKind },
           now,
         });
@@ -251,6 +278,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           review: out.review ? { ...out.review } : null,
           actionHash: hash,
           policySetVersion: ps.version,
+          baselineSnapshotId: lookup.snapshotId,
           supersedes: null,
           expiresAt: out.expiresAt,
           createdAt: now,
@@ -317,6 +345,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             : {}),
           action_hash: hash,
           policy_set_version: ps.version,
+          ...(lookup.snapshotId ? { baseline_snapshot_id: lookup.snapshotId } : {}),
           supersedes: null,
           expires_at: out.expiresAt.toISOString(),
           decision_token: token,
@@ -589,8 +618,82 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           kind: req.body.kind,
           trust: 'asserted',
         });
+
+        // The outcome loop feeds the baseline (SR-20): what executed and stuck becomes history; what was
+        // reverted, or executed something other than what was decided, is retracted from it.
+        let touchedHistory = false;
+        if (['reverted', 'incident', 'hash_mismatch'].includes(req.body.kind)) {
+          // Rebuild immediately: a retraction that only lands in the next scheduled rollup would leave
+          // VERA treating a reverted action as normal behaviour until something else happened to
+          // trigger one.
+          touchedHistory = await retractObservation(tx, key.orgId, d.id);
+          if (touchedHistory) {
+            const snapshot = await rebuildSnapshot(tx, key.orgId);
+            await appendAudit(tx, key.orgId, 'baseline.observation_retracted', `key:${key.keyId}`, {
+              decision_id: d.id,
+              kind: req.body.kind,
+              snapshot_id: snapshot.id,
+            });
+          }
+        } else if (req.body.kind === 'executed') {
+          touchedHistory = await recordObservation(tx, key.orgId, d.id);
+          if (touchedHistory) {
+            const snapshot = await rebuildSnapshotIfStale(tx, key.orgId, deps.baselineSnapshotMaxAgeMs);
+            if (snapshot)
+              await appendAudit(tx, key.orgId, 'baseline.snapshot_rebuilt', 'system', {
+                snapshot_id: snapshot,
+              });
+          }
+        }
       });
       return { recorded: true as const };
+    },
+  );
+
+  // ---------- GET /v1/baselines (reviewer session) — the numbers behind BASELINE.* codes ----------
+  app.get(
+    '/v1/baselines',
+    {
+      preHandler: requireReviewer(vera),
+      schema: {
+        querystring: z.object({ actor: z.string().optional(), class: z.string().optional() }),
+        response: {
+          200: z.object({
+            baselines: z.array(
+              z.object({
+                actor_id: z.string(),
+                action_class: z.string(),
+                observations: z.number(),
+                distinct_targets: z.number(),
+                first_seen: z.string(),
+                last_seen: z.string(),
+                magnitude_p50: z.number().nullable(),
+                magnitude_p95: z.number().nullable(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      const baselines = await vera.withTenant(reviewer.orgId, (tx) =>
+        baselineExplain(tx, reviewer.orgId, req.query.actor, req.query.class),
+      );
+      return { baselines };
+    },
+  );
+
+  // ---------- GET /v1/reports/policy-precision (reviewer session) — the outcome loop ----------
+  app.get(
+    '/v1/reports/policy-precision',
+    {
+      preHandler: requireReviewer(vera),
+      schema: { querystring: z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }) },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      return vera.withTenant(reviewer.orgId, (tx) => policyPrecision(tx, reviewer.orgId, req.query.days));
     },
   );
 
@@ -683,6 +786,7 @@ async function loadDecisionResponse(
       : {}),
     action_hash: d.actionHash,
     policy_set_version: d.policySetVersion,
+    ...(d.baselineSnapshotId ? { baseline_snapshot_id: d.baselineSnapshotId } : {}),
     supersedes: d.supersedes,
     expires_at: d.expiresAt.toISOString(),
     decision_token: token,

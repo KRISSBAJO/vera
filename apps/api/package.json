@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@fastify/swagger": "^9.8.1",
+    "@vera/baseline-engine": "workspace:*",
     "@vera/canon": "workspace:*",
     "@vera/db": "workspace:*",
     "@vera/decision-engine": "workspace:*",

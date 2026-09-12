@@ -32,6 +32,11 @@ export interface DecideInput {
   verifiedEvidence: readonly Evidence[];
   /** Providers that applied but did not answer in budget (EVIDENCE.MISSING; absence is never safe). */
   missingEvidence?: readonly { provider: string; reason: string }[];
+  /**
+   * Codes from the baseline engine, already evaluated against the org's history (SR-20). They may add
+   * severity; the aggregation below never lets them lower a verdict.
+   */
+  baselineCodes?: readonly ReasonCodeEntry[];
   keyOwner: { id: string; kind: 'user' | 'service' };
   now: Date;
 }
@@ -138,12 +143,12 @@ export function decide(input: DecideInput): DecideOutput {
       : 'no acting_for supplied',
   });
 
-  // --- baselines: not built yet (deliverable 4). Say so rather than pretend (BASELINE.INSUFFICIENT_HISTORY). ---
-  codes.push({
-    code: 'BASELINE.INSUFFICIENT_HISTORY',
-    severity: 'info',
-    detail: 'baseline engine not yet active',
-  });
+  // --- baselines (SR-20): add severity from org history; never clear anything, never lower a verdict ---
+  codes.push(
+    ...(input.baselineCodes?.filter((c) => c.severity !== 'high') ?? [
+      { code: 'BASELINE.INSUFFICIENT_HISTORY', severity: 'info', detail: 'no baseline lookup supplied' },
+    ]),
+  );
 
   // --- policy ---
   const policy = evaluate(input.policySet, {

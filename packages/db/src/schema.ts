@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { bigserial, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 /**
  * VERA domain model (brief §9). Every tenant-scoped table carries org_id; row-level security is applied by
@@ -289,6 +299,81 @@ export const outcomes = pgTable('outcomes', {
   createdAt: createdAt(),
 });
 
+/**
+ * One row per action that actually happened and stuck: ALLOWed or approved, executed, not reverted
+ * (SR-20, threat T09). Attempted, blocked, and rejected actions never train the baseline. Times are
+ * server receive times projected into the tenant's timezone (SR-06) — never the adapter's clock.
+ */
+export const baselineObservations = pgTable(
+  'baseline_observations',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => organizations.id),
+    decisionId: text('decision_id')
+      .notNull()
+      .references(() => decisions.id),
+    actorId: text('actor_id').notNull(),
+    actionClass: text('action_class').notNull(),
+    targetId: text('target_id').notNull(),
+    occurredAt: ts('occurred_at').notNull(),
+    localHour: integer('local_hour').notNull(),
+    localDow: integer('local_dow').notNull(),
+    /** First numeric argument that carries size (amount, count, …); null when the action has none. */
+    magnitude: doublePrecision('magnitude'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('baseline_observations_decision').on(t.decisionId),
+    index('baseline_observations_lookup').on(t.orgId, t.actionClass, t.actorId, t.occurredAt),
+    index('baseline_observations_recent').on(t.orgId, t.actorId, t.occurredAt),
+  ],
+);
+
+/** A materialised generation of the rollups. Decisions reference one so they stay reproducible (A10, A11). */
+export const baselineSnapshots = pgTable(
+  'baseline_snapshots',
+  {
+    id: text('id').primaryKey(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => organizations.id),
+    computedAt: ts('computed_at').notNull().defaultNow(),
+    observationCount: integer('observation_count').notNull().default(0),
+  },
+  (t) => [index('baseline_snapshots_org_computed').on(t.orgId, t.computedAt)],
+);
+
+export type BaselineScope = 'actor_class_target' | 'actor_class' | 'org_class';
+
+/** Rollups per scope. `key` is the scope's composite key, joined with   to avoid collisions. */
+export const baselineStats = pgTable(
+  'baseline_stats',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    orgId: text('org_id')
+      .notNull()
+      .references(() => organizations.id),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => baselineSnapshots.id),
+    scope: text('scope', { enum: ['actor_class_target', 'actor_class', 'org_class'] }).notNull(),
+    key: text('key').notNull(),
+    count: integer('count').notNull(),
+    firstSeen: ts('first_seen').notNull(),
+    lastSeen: ts('last_seen').notNull(),
+    /** 24 counts, index = hour of day in the tenant's timezone. */
+    hourHistogram: jsonb('hour_histogram').$type<number[]>().notNull(),
+    distinctTargets: integer('distinct_targets').notNull().default(0),
+    magnitudeN: integer('magnitude_n').notNull().default(0),
+    magnitudeP50: doublePrecision('magnitude_p50'),
+    magnitudeP95: doublePrecision('magnitude_p95'),
+    magnitudeMax: doublePrecision('magnitude_max'),
+  },
+  (t) => [uniqueIndex('baseline_stats_lookup').on(t.snapshotId, t.scope, t.key)],
+);
+
 /** Append-only, hash-chained per tenant (SR-16). UPDATE/DELETE are refused by trigger. */
 export const auditEvents = pgTable(
   'audit_events',
@@ -321,5 +406,8 @@ export const TENANT_TABLES = [
   'approvals',
   'decision_tokens',
   'outcomes',
+  'baseline_observations',
+  'baseline_snapshots',
+  'baseline_stats',
   'audit_events',
 ] as const;
