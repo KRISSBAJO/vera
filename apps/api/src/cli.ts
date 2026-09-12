@@ -4,6 +4,7 @@ import { createDb } from '@vera/db';
 import { POLICY_PACK_1, POLICY_PACK_1_VERSION } from '@vera/policy-engine';
 import { addReviewer, bootstrapTenant } from './bootstrap.js';
 import { loadConfig } from './config.js';
+import { formatChecks, runDoctor } from './doctor.js';
 import { adoptKmsKey } from './keys.js';
 import { activatePolicySet } from './policy-admin.js';
 
@@ -17,6 +18,7 @@ const usage = `vera-api <command>
   register-kms-key  --org-id <id> --arn <key arn>
                                             make a KMS-held key the tenant's active signer; the
                                             outgoing key retires so in-flight tokens still verify
+  doctor                                    preflight: RLS, schema, tenants, custody, integrations
   serve                                     start the API (same as: node dist/server.js)
 `;
 
@@ -130,6 +132,17 @@ Tenant created. These secrets are shown ONCE and stored only as hashes.
   retired kid  ${r.retired ?? '(none)'}
   JWKS         ${config.publicUrl}/.well-known/vera/${orgId}/jwks.json
 `);
+    break;
+  }
+  case 'doctor': {
+    const config = loadConfig();
+    // Doctor surveys tenants concurrently; a pool of 2 would serialise it back down again.
+    const vera = createDb(config.databaseUrl, { max: 8 });
+    const checks = await runDoctor(vera, config, process.env);
+    await vera.close();
+    console.log(`\n${formatChecks(checks)}\n`);
+    // Exit non-zero on a failure so this is usable as a deployment gate, not just something to read.
+    if (checks.some((c) => c.level === 'fail')) process.exit(1);
     break;
   }
   case 'serve':

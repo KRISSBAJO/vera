@@ -15,8 +15,14 @@ export interface VeraDb {
    */
   withTenant<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T>;
   /**
-   * Run `fn` in a transaction that may read credential tables without a tenant: API-key and reviewer-
-   * session lookup by secret hash happens *before* the tenant is known. Nothing else may use this.
+   * Run `fn` in a transaction that can see across tenants, because the tenant is not known yet.
+   *
+   * This is the one deliberate hole in tenant isolation, so its callers are listed rather than left
+   * to convention, and the list is meant to stay this short:
+   *  - `auth.ts`: API-key and reviewer-session lookup by secret hash, which decides *which* tenant.
+   *  - `doctor.ts`: the operator preflight, which reports on every tenant by design.
+   *
+   * Anything that already knows its tenant must use `withTenant` instead.
    */
   withAuthLookup<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
   migrate(): Promise<void>;

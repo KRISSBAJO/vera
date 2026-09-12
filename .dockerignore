@@ -1,0 +1,20 @@
+# Never let a build context carry secrets. .env holds live credentials; a COPY . . would bake them
+# into an image layer where they survive deletion and travel with every `docker push`.
+.env
+.env.*
+!.env.example
+**/.env
+*.pem
+*.key
+
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+.git
+.github
+docs/word
+**/*.test.ts
+**/coverage
+.npmcache

@@ -7,6 +7,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | File | What it is |
 |---|---|
 | `docs/brief-v2.md` | Product and build spec (September 2026). Start here. |
+| `docs/design-partner-pilot.md` | What a pilot involves: scope, what is stored, what happens when it breaks, what is not production-ready, and how we both judge whether it worked. |
 | `docs/competitive-scan-2026-09.md` | Landscape scan behind the brief's §2 — ~75 sources. |
 | `docs/threat-model.md` | Build deliverable 1: trust boundaries, threats T01–T25, security requirements SR-01–SR-22, accepted risks, open questions. |
 | `docs/boundary-and-assumptions.md` | Build deliverable 1: the product boundary restated, and 17 unsafe or ambiguous assumptions found in the brief with resolutions. |
@@ -49,7 +50,19 @@ Restart Claude Code in that project; hooks are loaded at session start. Approve 
 curl -X POST http://localhost:4000/v1/decisions/dec_…/approve -H "Authorization: Bearer vera_rs_…" -H "content-type: application/json" -d '{"rationale":"checked"}'
 ```
 
-## Run it locally
+## Run the whole thing (pilot)
+
+No toolchain needed beyond Docker — API, dashboard, Postgres and Redis, with migrations applied before the API starts:
+
+```bash
+cp .env.example .env    # set VERA_MASTER_KEY, POSTGRES_PASSWORD, VERA_APP_PASSWORD
+docker compose -f infra/docker-compose.pilot.yml up -d --build
+docker compose -f infra/docker-compose.pilot.yml run --rm api node dist/cli.js doctor
+```
+
+`doctor` is the preflight: whether row-level security actually applies, whether migrations ran, each tenant's policy set and key custody, and what every unconfigured integration costs you. It exits non-zero on a failure, so it works as a deployment gate.
+
+## Run it locally (development)
 
 ```bash
 corepack pnpm install

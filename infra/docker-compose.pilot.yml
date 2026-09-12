@@ -1,0 +1,103 @@
+# The whole of VERA, one command, for a design-partner pilot.
+#
+#   cp .env.example .env      # then set VERA_MASTER_KEY (see below)
+#   docker compose -f infra/docker-compose.pilot.yml up -d --build
+#   docker compose -f infra/docker-compose.pilot.yml run --rm api node dist/cli.js doctor
+#
+# Differs from docker-compose.yml (the development one) in three ways that matter:
+#  - Postgres is NOT published to the host. In development that port is a convenience; in a pilot it
+#    is a database full of a customer's decision history listening on their laptop's network.
+#  - Migrations run as a one-shot job that must succeed before the API starts, rather than by hand.
+#  - The API runs as the unprivileged vera_app role, which is what makes row-level security apply at
+#    all (a superuser silently bypasses every policy — this cost us an afternoon once).
+name: vera-pilot
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vera
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+      POSTGRES_DB: vera
+      # Read by postgres-init/01-app-role.sh the first time the volume is created.
+      VERA_APP_PASSWORD: "${VERA_APP_PASSWORD:?set VERA_APP_PASSWORD in .env}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U vera -d vera']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+
+  # One-shot. `up` waits for this to exit 0 before starting the API, so the API never meets a schema
+  # it does not understand.
+  migrate:
+    build:
+      context: ..
+      dockerfile: infra/api.Dockerfile
+    command: ['node', 'dist/cli.js', 'migrate']
+    environment:
+      # Migrations need the owning superuser; the API deliberately never gets this URL.
+      MIGRATION_DATABASE_URL: "postgres://vera:${POSTGRES_PASSWORD}@postgres:5432/vera"
+      VERA_MASTER_KEY: "${VERA_MASTER_KEY:?set VERA_MASTER_KEY in .env, e.g. openssl rand -base64 32}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/api.Dockerfile
+    environment:
+      DATABASE_URL: "postgres://vera_app:${VERA_APP_PASSWORD}@postgres:5432/vera"
+      VERA_MASTER_KEY: "${VERA_MASTER_KEY:?set VERA_MASTER_KEY in .env}"
+      VERA_PUBLIC_URL: "${VERA_PUBLIC_URL:-http://localhost:4000}"
+      PORT: 4000
+      # Every one of these is optional. Absent means the feature is off, never that VERA fails.
+      VERA_KMS_REGION: ${VERA_KMS_REGION:-}
+      VERA_KMS_KEY_ARN: ${VERA_KMS_KEY_ARN:-}
+      VERA_KMS_ACCESS_KEY_ID: ${VERA_KMS_ACCESS_KEY_ID:-}
+      VERA_KMS_SECRET_ACCESS_KEY: ${VERA_KMS_SECRET_ACCESS_KEY:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_REVIEW_CHANNEL: ${SLACK_REVIEW_CHANNEL:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:-}
+      GITHUB_APP_PRIVATE_KEY_PATH: ${GITHUB_APP_PRIVATE_KEY_PATH:-}
+    ports:
+      - '${VERA_API_PORT:-4000}:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: infra/dashboard.Dockerfile
+    environment:
+      VERA_API_URL: "http://api:4000"
+      PORT: 4100
+    ports:
+      - '${VERA_DASHBOARD_PORT:-4100}:4100'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
