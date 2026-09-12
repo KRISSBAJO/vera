@@ -1,3 +1,4 @@
+import { createPublicKey, generateKeyPairSync } from 'node:crypto';
 import type { DecideRequest } from '@vera/schemas';
 import { exportPKCS8, generateKeyPair, jwtVerify } from 'jose';
 import { describe, expect, it } from 'vitest';
@@ -144,6 +145,40 @@ describe('github provider (token auth)', () => {
 });
 
 describe('github provider (app auth)', () => {
+  /** GitHub's download is PKCS#1. The PKCS#8 case is here so a converted key keeps working too. */
+  it.each([
+    ['PKCS#1 — what GitHub actually downloads', 'pkcs1'],
+    ['PKCS#8 — a converted key', 'pkcs8'],
+  ] as const)('accepts an app private key in %s format', async (_label, type) => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type, format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    expect(
+      privateKey.startsWith(type === 'pkcs1' ? '-----BEGIN RSA PRIVATE KEY' : '-----BEGIN PRIVATE KEY'),
+    ).toBe(true);
+
+    const route: Route = (url) =>
+      url.endsWith('/app/installations/42/access_tokens')
+        ? {
+            status: 201,
+            body: { token: 'ghs_inst_1', expires_at: new Date(Date.now() + 3600_000).toISOString() },
+          }
+        : prFixture()(url);
+    const calls: { url: string; auth?: string }[] = [];
+    const p = githubProvider({
+      auth: { kind: 'app', appId: '12345', privateKeyPem: privateKey, installationId: '42' },
+      fetch: fakeFetch(route, calls),
+    });
+    const [ev] = await p.provide(request(), new AbortController().signal);
+    expect(ev?.data.approved).toBe(true);
+
+    const jwt = calls.find((c) => c.url.endsWith('/access_tokens'))?.auth?.replace('Bearer ', '') ?? '';
+    const { payload } = await jwtVerify(jwt, createPublicKey(publicKey), { issuer: '12345' });
+    expect(payload.exp! - payload.iat!).toBe(9 * 60);
+  });
+
   it('mints an installation token with an RS256 app JWT and caches it', async () => {
     const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
     const pem = await exportPKCS8(privateKey);

@@ -134,6 +134,24 @@ describe('classification (deterministic; SR-03 conservative)', () => {
     expect(classify('Bash', { command }, opts).class).toBe(cls as never);
   });
 
+  // Windows dogfood, 2026-09-11: a Get-ChildItem through the PowerShell tool was BLOCKed as
+  // unknown.consequential, because only `Bash` was recognised as a shell.
+  it.each([
+    ['Get-ChildItem "$env:USERPROFILE\\Downloads\\*.pem"', 'vcs.read'],
+    ['Get-Content package.json | Select-Object -First 5', 'vcs.read'],
+    ['Test-Path C:/Users/kriss/vera', 'vcs.read'],
+    ['Remove-Item -Recurse -Force dist', 'shell.exec'],
+    ['Set-Content secrets.txt "x"', 'shell.exec'],
+  ])('powershell: %s → %s', (command, cls) => {
+    expect(classify('PowerShell', { command }, opts).class).toBe(cls as never);
+  });
+
+  it('classifies every shell tool by its command, not its name', () => {
+    for (const tool of ['Bash', 'PowerShell', 'Shell', 'Terminal']) {
+      expect(classify(tool, { command: 'git push --force origin main' }, opts).class).toBe('vcs.push');
+    }
+  });
+
   it('derives force/branch for pushes, production for prod-looking commands, destructive hints', () => {
     const push = classify('Bash', { command: 'git push --force origin main' }, opts);
     expect(push.arguments).toMatchObject({ force: true, branch: 'main' });

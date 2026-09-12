@@ -40,6 +40,8 @@ export interface ClassifyOptions {
 }
 
 // Claude Code built-ins.
+/** Every tool that runs a shell command. All are classified from the command, not the tool name. */
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell', 'Shell', 'Terminal', 'BashOutput']);
 const READ_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LS', 'NotebookRead', 'TodoRead']);
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const HTTP_READ_TOOLS = new Set(['WebFetch', 'WebSearch']);
@@ -92,6 +94,9 @@ const DESTRUCTIVE_SHELL =
   /\b(rm\s+-[a-z]*r[a-z]*f|rm\s+-[a-z]*f[a-z]*r|mkfs|dd\s+if=|shred|chmod\s+-R\s+777|:\(\)\s*\{)/;
 const READ_ONLY_SHELL =
   /^\s*(ls|cat|head|tail|less|more|wc|grep|rg|find|fd|pwd|echo|printf|which|type|env|printenv|stat|file|du|df|tree|jq|yq|sort|uniq|diff|node\s+-v|npm\s+-v|pnpm\s+-v|python\d?\s+--version|git\s+(status|log|diff|show|branch|remote|rev-parse|ls-files|describe|blame|stash\s+list|check-ignore))\b/;
+/** PowerShell's read-only verbs. Get-/Test-/Measure-/Select- never mutate; Set-/Remove-/New- do. */
+const READ_ONLY_POWERSHELL =
+  /^\s*(Get-(ChildItem|Content|Command|Location|Item|ItemProperty|Process|Service|Date|Host|Member|Help|Variable|ComputerInfo)|Test-(Path|Connection|NetConnection)|Measure-Object|Select-(Object|String)|Where-Object|Sort-Object|Compare-Object|Format-(List|Table)|Resolve-Path|Split-Path|Join-Path|Convert(From|To)-Json|Write-(Output|Host))\b/i;
 const DEPLOY =
   /\b(vercel\s+(deploy|--prod)|netlify\s+deploy|fly\s+deploy|heroku\s+(release|container:release)|kubectl\s+(apply|rollout|set\s+image)|helm\s+(install|upgrade)|terraform\s+apply|pulumi\s+up|aws\s+(cloudformation|ecs|lambda\s+update)|gcloud\s+(run\s+deploy|app\s+deploy)|serverless\s+deploy|cdk\s+deploy)\b/;
 const INFRA =
@@ -196,7 +201,10 @@ export function classify(
     });
   }
 
-  if (toolName === 'Bash') {
+  // Claude Code ships more than one shell tool (Bash on POSIX, PowerShell on Windows). Treating only
+  // `Bash` as a shell sent PowerShell to unknown.consequential, which blocked a `Get-ChildItem`
+  // during the first Windows dogfood session — correct for an unknown tool, wrong for a directory listing.
+  if (SHELL_TOOLS.has(toolName)) {
     const command = typeof toolInput.command === 'string' ? toolInput.command : '';
     const prod = targetsProduction(command);
     const environment = prod ? 'production' : opts.environment;
@@ -219,6 +227,15 @@ export function classify(
       return base('vcs.merge', {
         hints: { destructive: /reset\s+--hard|branch\s+-D|checkout\s+--/.test(command) },
       });
+    const pipesAway = (c: string) =>
+      /[;&>]/.test(
+        c.replace(
+          /\|\s*(grep|head|tail|wc|sort|uniq|jq|less|cat|Select-\w+|Where-Object|Sort-Object|Measure-Object|Format-\w+|Out-String)\b[^|;&>]*/gi,
+          '',
+        ),
+      );
+    if (READ_ONLY_POWERSHELL.test(command) && !pipesAway(command))
+      return base('vcs.read', { hints: { read_only: true } });
     if (
       READ_ONLY_SHELL.test(command) &&
       !/[|;&>]/.test(command.replace(/\|\s*(grep|head|tail|wc|sort|uniq|jq|less|cat)\b.*/g, ''))

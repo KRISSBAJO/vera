@@ -1,5 +1,6 @@
+import { createPrivateKey } from 'node:crypto';
 import type { DecideRequest, Evidence } from '@vera/schemas';
-import { importPKCS8, SignJWT } from 'jose';
+import { SignJWT } from 'jose';
 import type { EvidenceProvider } from './provider.js';
 
 /**
@@ -47,7 +48,9 @@ export function githubProvider(opts: GitHubProviderOptions): EvidenceProvider {
     if (opts.auth.kind === 'token') return opts.auth.token;
     if (installationToken && installationToken.expiresAt - Date.now() > 60_000)
       return installationToken.token;
-    const key = await importPKCS8(opts.auth.privateKeyPem, 'RS256');
+    // GitHub hands out PKCS#1 ("BEGIN RSA PRIVATE KEY"); jose's importPKCS8 only accepts PKCS#8.
+    // node:crypto reads both, so the key works whichever format the customer downloaded.
+    const key = createPrivateKey(opts.auth.privateKeyPem);
     const iat = Math.floor(now().getTime() / 1000) - 30;
     const jwt = await new SignJWT({})
       .setProtectedHeader({ alg: 'RS256' })
