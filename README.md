@@ -69,3 +69,5 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 6. Design-partner packaging
 
 Days 1–10 also run the validation interviews (brief Appendix A); the day-10 gate decides whether Policy Pack 1 stays on coding agents.
+
+<!-- VERA GitHub App evidence check, 2026-09-12T03:46:50Z -->
