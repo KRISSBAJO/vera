@@ -21,7 +21,15 @@ import {
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const createdAt = () => ts('created_at').notNull().defaultNow();
 
+export interface RedactionPattern {
+  name: string;
+  pattern: string;
+  flags?: string;
+}
+
 export interface OrgDefaults {
+  /** Tenant-specific secret shapes, applied before the built-in rules (SR-15). */
+  redaction_patterns?: RedactionPattern[];
   /** Verdict when no policy matches, per class group (brief §7.1). */
   no_match?: { consequential?: 'BLOCK' | 'REVIEW'; read_only?: 'ALLOW' | 'REVIEW' };
   /** Severity → risk-score weight. Part of policy_set_version for reproducibility (brief §7.4). */
@@ -177,7 +185,12 @@ export const actionRequests = pgTable(
       .references(() => apiKeys.id),
     actor: jsonb('actor').$type<Record<string, unknown>>().notNull(),
     actingFor: jsonb('acting_for').$type<Record<string, unknown>>(),
+    /** REDACTED (SR-15). This is what reviewers, reports and any model ever see. */
     action: jsonb('action').$type<Record<string, unknown>>().notNull(),
+    /** The raw action, sealed. Revealing it is a step-up, audited action. */
+    actionRawSealed: text('action_raw_sealed'),
+    /** What redaction removed: rule, path, length. Never the value. */
+    redactionFindings: jsonb('redaction_findings').$type<unknown[]>().notNull().default([]),
     target: jsonb('target').$type<Record<string, unknown>>(),
     context: jsonb('context').$type<Record<string, unknown>>(),
     evidence: jsonb('evidence').$type<unknown[]>().notNull().default([]),

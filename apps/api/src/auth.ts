@@ -83,6 +83,11 @@ export async function authenticateReviewer(
   return row ? { kind: 'reviewer', ...row } : null;
 }
 
+/**
+ * These are registered as `onRequest` hooks, not `preHandler`: Fastify validates the body before
+ * preHandler runs, which would let an unauthenticated caller probe request schemas and learn what
+ * VERA accepts. Authentication answers first; only then does the request get parsed.
+ */
 export function requireApiKey(vera: VeraDb) {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const key = await authenticateApiKey(vera, bearer(req));

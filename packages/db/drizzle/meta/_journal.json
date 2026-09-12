@@ -36,6 +36,13 @@
       "when": 1789182214706,
       "tag": "0004_baseline_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789185248952,
+      "tag": "0005_redaction",
+      "breakpoints": true
     }
   ]
 }

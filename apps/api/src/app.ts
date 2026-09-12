@@ -2,18 +2,20 @@ import { createHash } from 'node:crypto';
 import swagger from '@fastify/swagger';
 import { evaluateBaselines, localParts, magnitudeOf } from '@vera/baseline-engine';
 import { actionHash } from '@vera/canon';
-import { appendAudit, newId, schema, type Tx, type VeraDb } from '@vera/db';
+import { appendAudit, newId, schema, seal, type Tx, unseal, type VeraDb } from '@vera/db';
 import { decide, type TenantConfig } from '@vera/decision-engine';
 import { verifyDecisionToken } from '@vera/decision-token';
 import { type EvidenceProvider, gatherEvidence } from '@vera/evidence';
+import { redact, rulesFor, tenantRules } from '@vera/redaction';
 import {
   DecideRequestSchema,
   type DecideResponse,
   DecideResponseSchema,
+  REASON_CODES,
   responseInvariantViolations,
 } from '@vera/schemas';
 import canonicalize from 'canonicalize';
-import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm';
 import Fastify, { type FastifyInstance } from 'fastify';
 import {
   hasZodFastifySchemaValidationErrors,
@@ -146,7 +148,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post(
     '/v1/decide',
     {
-      preHandler: requireApiKey(vera),
+      onRequest: requireApiKey(vera),
       schema: { body: DecideRequestSchema, response: { 200: DecideResponseSchema, 409: ErrorSchema } },
     },
     async (req) => {
@@ -212,6 +214,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           environment: body.action.environment,
         });
 
+        // Redact AFTER hashing (SR-15, threat T18): the hash must cover what the adapter will actually
+        // execute, while everything persisted — and therefore everything a reviewer or a model ever
+        // sees — is the masked form. The raw action is sealed and revealed only by a step-up action.
+        const redactionRules = rulesFor(tenantRules(org.defaults.redaction_patterns));
+        const redactedAction = redact(body.action, redactionRules);
+        const redactedContext = redact(body.context ?? null, redactionRules);
+        const redactedEvidence = redact(body.evidence ?? [], redactionRules);
+
         const requestRowId = newId('req');
         await tx.insert(actionRequests).values({
           id: requestRowId,
@@ -222,13 +232,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           apiKeyId: key.keyId,
           actor: body.actor,
           actingFor: body.acting_for ?? null,
-          action: body.action,
+          action: redactedAction.value,
+          actionRawSealed: redactedAction.redacted ? seal(JSON.stringify(body.action), deps.masterKey) : null,
+          redactionFindings: redactedAction.findings,
           target: body.target ?? null,
-          context: body.context ?? null,
-          evidence: body.evidence ?? [],
+          context: redactedContext.value,
+          evidence: redactedEvidence.value,
           actionHash: hash,
           receivedAt: now,
         });
+        if (redactedAction.redacted)
+          await appendAudit(tx, key.orgId, 'request.redacted', `key:${key.keyId}`, {
+            request_id: body.request_id,
+            findings: redactedAction.findings,
+          });
         await tx.update(apiKeys).set({ lastUsedAt: now }).where(eq(apiKeys.id, key.keyId));
 
         // Proof: facts fetched with VERA's own credentials, gathered before the row is written so the
@@ -364,7 +381,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get(
     '/v1/decisions/:id',
     {
-      preHandler: requireApiKey(vera),
+      onRequest: requireApiKey(vera),
       schema: { params: z.object({ id: z.string() }), response: { 200: DecisionStatusSchema } },
     },
     async (req) => {
@@ -398,7 +415,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.post(
       `/v1/decisions/:id/${verdict}`,
       {
-        preHandler: requireReviewer(vera),
+        onRequest: requireReviewer(vera),
         schema: {
           params: z.object({ id: z.string() }),
           body: ReviewBody,
@@ -532,7 +549,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post(
     '/v1/tokens/consume',
     {
-      preHandler: requireApiKey(vera),
+      onRequest: requireApiKey(vera),
       schema: {
         body: ConsumeBody,
         response: { 200: z.object({ consumed: z.literal(true), jti: z.string() }), 409: ErrorSchema },
@@ -588,7 +605,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post(
     '/v1/decisions/:id/outcome',
     {
-      preHandler: requireApiKey(vera),
+      onRequest: requireApiKey(vera),
       schema: {
         params: z.object({ id: z.string() }),
         body: OutcomeBody,
@@ -650,11 +667,214 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     },
   );
 
+  // ---------- the review queue (reviewer session) ----------
+  const QueueItem = z.object({
+    decision_id: z.string(),
+    created_at: z.string(),
+    expires_at: z.string(),
+    status: z.enum(['pending', 'approved', 'rejected', 'expired']),
+    actor: z.string(),
+    acting_for: z.string().nullable(),
+    action_class: z.string(),
+    tool: z.string(),
+    target: z.string(),
+    environment: z.string().nullable(),
+    risk: z.number(),
+    top_reason: z.string().nullable(),
+    quorum: z.number(),
+    approvals: z.number(),
+    /** Whether THIS reviewer is barred from deciding it (SR-09) — shown before they open it. */
+    sod_blocked: z.boolean(),
+  });
+
+  app.get(
+    '/v1/reviews',
+    {
+      onRequest: requireReviewer(vera),
+      schema: {
+        querystring: z.object({
+          status: z.enum(['pending', 'approved', 'rejected', 'expired', 'all']).default('pending'),
+          limit: z.coerce.number().int().min(1).max(200).default(50),
+        }),
+        response: { 200: z.object({ reviews: z.array(QueueItem) }) },
+      },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      return vera.withTenant(reviewer.orgId, async (tx) => {
+        const [me] = await tx.select().from(users).where(eq(users.id, reviewer.userId)).limit(1);
+        const rows = await tx
+          .select({ review: reviews, decision: decisions, request: actionRequests })
+          .from(reviews)
+          .innerJoin(decisions, eq(decisions.id, reviews.decisionId))
+          .innerJoin(actionRequests, eq(actionRequests.id, decisions.actionRequestId))
+          .where(
+            req.query.status === 'all'
+              ? eq(reviews.orgId, reviewer.orgId)
+              : and(eq(reviews.orgId, reviewer.orgId), eq(reviews.status, req.query.status)),
+          )
+          .orderBy(desc(reviews.createdAt))
+          .limit(req.query.limit);
+
+        const counts = new Map<string, number>();
+        if (rows.length > 0) {
+          const approved = await tx
+            .select({ reviewId: approvals.reviewId })
+            .from(approvals)
+            .where(and(eq(approvals.orgId, reviewer.orgId), eq(approvals.verdict, 'approve')));
+          for (const a of approved) counts.set(a.reviewId, (counts.get(a.reviewId) ?? 0) + 1);
+        }
+
+        const identities = [me?.id, me?.email].filter((x): x is string => !!x);
+        return {
+          reviews: rows.map(({ review, decision, request }) => {
+            const action = request.action as { class: string; tool: string; environment?: string };
+            const target = request.target as { id?: string } | null;
+            const codes = decision.reasonCodes as { code: string; severity: string }[];
+            const top =
+              codes.find((c) => c.severity === 'high') ?? codes.find((c) => c.severity === 'medium');
+            return {
+              decision_id: decision.id,
+              created_at: decision.createdAt.toISOString(),
+              expires_at: review.expiresAt.toISOString(),
+              status: review.status,
+              actor: String((request.actor as { id: string }).id),
+              acting_for: (request.actingFor as { id?: string } | null)?.id ?? null,
+              action_class: action.class,
+              tool: action.tool,
+              target: target?.id ?? '-',
+              environment: action.environment ?? null,
+              risk: decision.riskScore,
+              top_reason: top?.code ?? null,
+              quorum: review.quorum,
+              approvals: counts.get(review.id) ?? 0,
+              sod_blocked: review.excluded.some((x) => identities.includes(x)),
+            };
+          }),
+        };
+      });
+    },
+  );
+
+  app.get(
+    '/v1/reviews/:id',
+    { onRequest: requireReviewer(vera), schema: { params: z.object({ id: z.string() }) } },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      const found = await vera.withTenant(reviewer.orgId, async (tx) => {
+        const [row] = await tx
+          .select({ review: reviews, decision: decisions, request: actionRequests })
+          .from(decisions)
+          .innerJoin(actionRequests, eq(actionRequests.id, decisions.actionRequestId))
+          .leftJoin(reviews, eq(reviews.decisionId, decisions.id))
+          .where(and(eq(decisions.orgId, reviewer.orgId), eq(decisions.id, req.params.id)))
+          .limit(1);
+        if (!row) return null;
+        const [me] = await tx.select().from(users).where(eq(users.id, reviewer.userId)).limit(1);
+        const priorApprovals = row.review
+          ? await tx
+              .select({
+                verdict: approvals.verdict,
+                rationale: approvals.rationale,
+                at: approvals.createdAt,
+                email: users.email,
+              })
+              .from(approvals)
+              .innerJoin(users, eq(users.id, approvals.userId))
+              .where(eq(approvals.reviewId, row.review.id))
+          : [];
+        const identities = [me?.id, me?.email].filter((x): x is string => !!x);
+        const codes = row.decision.reasonCodes as {
+          code: string;
+          severity: string;
+          policy_id?: string;
+          detail?: string;
+        }[];
+        return {
+          decision_id: row.decision.id,
+          decision: row.decision.decision,
+          created_at: row.decision.createdAt.toISOString(),
+          expires_at: row.decision.expiresAt.toISOString(),
+          risk: { score: row.decision.riskScore, calibrated: false },
+          confidence: row.decision.confidence / 100,
+          policy_set_version: row.decision.policySetVersion,
+          baseline_snapshot_id: row.decision.baselineSnapshotId,
+          actor: row.request.actor,
+          acting_for: row.request.actingFor,
+          /** Redacted (SR-15). `redaction` says what was removed. */
+          action: row.request.action,
+          redaction: row.request.redactionFindings,
+          has_raw: row.request.actionRawSealed !== null,
+          target: row.request.target,
+          context: row.request.context,
+          evidence: row.decision.evidence,
+          reason_codes: codes.map((c) => {
+            const def = REASON_CODES[c.code as keyof typeof REASON_CODES];
+            return { ...c, description: def?.description ?? null, guidance: def?.guidance ?? null };
+          }),
+          review: row.review
+            ? {
+                status: row.review.status,
+                quorum: row.review.quorum,
+                routed_to: row.review.routedTo,
+                excluded: row.review.excluded,
+                sod_blocked: row.review.excluded.some((x) => identities.includes(x)),
+                approvals: priorApprovals.map((a) => ({
+                  by: a.email,
+                  verdict: a.verdict,
+                  rationale: a.rationale,
+                  at: a.at.toISOString(),
+                })),
+              }
+            : null,
+        };
+      });
+      if (!found) throw notFound('decision');
+      return found;
+    },
+  );
+
+  /**
+   * Reveal the raw, unredacted action. Separate endpoint, separate audit event, and the reviewer must
+   * say why — so looking at a customer's secret is a deliberate act with a name attached (SR-15).
+   */
+  app.post(
+    '/v1/decisions/:id/reveal',
+    {
+      onRequest: requireReviewer(vera),
+      schema: {
+        params: z.object({ id: z.string() }),
+        body: z.object({ reason: z.string().min(3).max(500) }),
+        response: { 200: z.object({ action: z.record(z.string(), z.unknown()) }), 404: ErrorSchema },
+      },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      const action = await vera.withTenant(reviewer.orgId, async (tx) => {
+        const [row] = await tx
+          .select({ sealed: actionRequests.actionRawSealed, requestId: actionRequests.requestId })
+          .from(decisions)
+          .innerJoin(actionRequests, eq(actionRequests.id, decisions.actionRequestId))
+          .where(and(eq(decisions.orgId, reviewer.orgId), eq(decisions.id, req.params.id)))
+          .limit(1);
+        if (!row?.sealed) return null;
+        await appendAudit(tx, reviewer.orgId, 'request.raw_revealed', `user:${reviewer.userId}`, {
+          decision_id: req.params.id,
+          request_id: row.requestId,
+          reason: req.body.reason,
+        });
+        return JSON.parse(unseal(row.sealed, deps.masterKey)) as Record<string, unknown>;
+      });
+      if (!action) throw notFound('raw action (nothing was redacted, or the decision does not exist)');
+      return { action };
+    },
+  );
+
   // ---------- GET /v1/baselines (reviewer session) — the numbers behind BASELINE.* codes ----------
   app.get(
     '/v1/baselines',
     {
-      preHandler: requireReviewer(vera),
+      onRequest: requireReviewer(vera),
       schema: {
         querystring: z.object({ actor: z.string().optional(), class: z.string().optional() }),
         response: {
@@ -688,7 +908,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get(
     '/v1/reports/policy-precision',
     {
-      preHandler: requireReviewer(vera),
+      onRequest: requireReviewer(vera),
       schema: { querystring: z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }) },
     },
     async (req) => {
@@ -710,7 +930,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get(
     '/v1/audit-events',
     {
-      preHandler: requireReviewer(vera),
+      onRequest: requireReviewer(vera),
       schema: {
         querystring: z.object({
           after: z.coerce.number().int().default(0),
