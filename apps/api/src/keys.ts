@@ -91,6 +91,54 @@ export async function rotateKey(
 }
 
 /**
+ * Adopt a KMS-held key as the tenant's active signing key (ADR-0005).
+ *
+ * This is a rotation, not a swap: the outgoing key moves to `retiring`, so tokens signed seconds ago
+ * keep verifying until they expire while everything new is signed in KMS. Swapping in place would
+ * invalidate every token in flight for no reason.
+ *
+ * The caller passes the JWK it already fetched from KMS. That ordering matters — fetching the public
+ * half proves the key exists, carries the right spec, and is reachable with these credentials
+ * *before* we make it the active key. Registering first and discovering otherwise at signing time
+ * would take the tenant's signing offline.
+ */
+export async function adoptKmsKey(
+  tx: Tx,
+  orgId: string,
+  params: { kid: string; keyArn: string; publicJwk: Record<string, unknown> },
+  actor: string,
+): Promise<{ kid: string; retired: string | null }> {
+  const [current] = await tx
+    .select({ id: signingKeys.id, kid: signingKeys.kid })
+    .from(signingKeys)
+    .where(and(eq(signingKeys.orgId, orgId), eq(signingKeys.status, 'active')))
+    .limit(1);
+
+  if (current) {
+    await tx
+      .update(signingKeys)
+      .set({ status: 'retiring', rotatedAt: new Date() })
+      .where(eq(signingKeys.id, current.id));
+  }
+  await tx.insert(signingKeys).values({
+    id: newId('sk'),
+    orgId,
+    kid: params.kid,
+    publicJwk: params.publicJwk,
+    kmsKeyArn: params.keyArn,
+    status: 'active',
+  });
+
+  await appendAudit(tx, orgId, 'signing_key.kms_adopted', actor, {
+    new_kid: params.kid,
+    retired_kid: current?.kid ?? null,
+    // The ARN identifies the key, not its secret half — it belongs in the audit trail.
+    key_arn: params.keyArn,
+  });
+  return { kid: params.kid, retired: current?.kid ?? null };
+}
+
+/**
  * Withdraw a key immediately. Every token it signed stops verifying, whether or not it has expired
  * and whether or not a human approved it — that is what makes this incident response rather than
  * housekeeping.

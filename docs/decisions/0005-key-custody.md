@@ -1,6 +1,6 @@
 # ADR-0005 — Key custody: the KMS boundary, rotation, and revocation
 
-**Status:** accepted (rotation and revocation implemented; KMS backend pending credentials) · 12 September 2026
+**Status:** accepted (rotation, revocation, and the KMS backend implemented; the KMS path is unit-tested but not yet exercised against a live key) · 12 September 2026
 **Context:** threat T14 and SR-11. A valid EdDSA signature *is* an approval, so the tenant signing key is the highest-value asset VERA holds (asset A1 in the threat model). Until now it had no revocation path short of editing the database by hand.
 
 ## Decisions
@@ -31,25 +31,43 @@ The alternative — refusing to revoke without first rotating — would mean the
 
 Reviewers approve actions; owners manage keys. Revocation invalidates other people's live approvals, which is not a reviewer's decision to make.
 
-### 6. The KMS boundary is the `Signer` interface — and it is honestly not yet a KMS
+### 6. The KMS boundary is the `Signer` interface
 
 ```ts
 export interface Signer {
   readonly kid: string;
-  sign(jwt: SignJWT): Promise<string>;
+  signCompact(header: JwsHeader, payload: Record<string, unknown>): Promise<string>;
 }
 ```
 
-Nothing outside `packages/decision-token` and `apps/api/src/services.ts` touches private key material. Today the only implementation is `localSigner`, which unseals an AES-GCM-wrapped JWK from the database using `VERA_MASTER_KEY`. **That is development-grade custody, not production custody**, and the difference should not be glossed:
+The interface takes a header and payload rather than a configured `SignJWT`, because a remote signer can only be handed bytes. That shape change was the whole cost of supporting KMS; no caller changed.
 
-- an operator with database access *and* the master key can extract a private key;
-- `exportPrivateJwk` exists, so an export path exists in code (KMS's central virtue is that it does not).
+Two implementations, and the difference between them is the point:
 
-A `kmsSigner` implementing the same interface — where `sign()` is an API call and the key never leaves the HSM — is a drop-in replacement, and the rest of the system needs no change. It is not written yet because it needs cloud credentials and would be untestable here without them. **Until it exists, VERA should not hold keys for anyone else's production traffic.** This is recorded as an accepted risk rather than presented as complete.
+| | `localSigner` (development) | `kmsSigner` (production) |
+|---|---|---|
+| Private key | AES-GCM sealed in our database, unsealed into process memory | In KMS; never reaches this process |
+| Export path | `exportPrivateJwk` exists in code | None — `@vera/signer-kms` exposes only `kmsSigner`, `kmsPublicJwk`, `kidForKeyArn`, and a test asserts that list |
+| Compromise of DB + `VERA_MASTER_KEY` | Yields a usable signing key | Yields nothing signable |
+
+AWS KMS gained EdDSA (`ECC_NIST_EDWARDS25519`) in November 2025, which is what makes this a drop-in: the token format stays Ed25519 and **no verifier changes**. Had that not existed we would have faced a much worse choice — switch every token to ECDSA, or keep keys in our own custody.
+
+Three deliberate refusals in the implementation:
+
+1. **A 64-byte signature guard.** KMS DER-wraps ECDSA signatures; JWS EdDSA requires the bare 64 bytes. Passing a wrapped signature through would mint tokens that fail verification *everywhere* — a system-wide outage presenting as a mystery. The signer throws instead, naming the likely cause.
+2. **No fallback to a local key.** A key row with a `kms_key_arn` signs through KMS or not at all. Falling back would silently downgrade the custody a tenant was promised (T14) — and the tokens would fail verification anyway, so the fallback buys nothing even on its own terms.
+3. **No fallback to ambient AWS credentials.** Deployments routinely carry broad `AWS_*` credentials for unrelated services. Inheriting them would mean VERA signs under whatever identity was lying around. Credentials are `VERA_KMS_*`, and using an instance role is an explicit opt-in.
+
+Custody is a schema invariant, not a convention: `signing_keys` carries a `CHECK` that exactly one of `private_jwk_sealed` and `kms_key_arn` is set. Neither would fail at the moment someone needed to sign; both would silently pick one.
+
+### 7. Adopting a KMS key is a rotation
+
+`vera-api register-kms-key --org-id <id> --arn <arn>` fetches the public half **first** — proving the key exists, carries the right spec, and is reachable with these credentials — and only then makes it active, moving the outgoing local key to `retiring`. Registering first and discovering otherwise at signing time would take the tenant offline. The old key keeps verifying tokens already in flight; revoking it stays a separate, deliberate act.
 
 ## Consequences
 
+- Accepted risk #8 (development-grade key custody) is **closed for tenants registered against a KMS key**, and remains open for any tenant still on `localSigner`. Custody is now per-key, so this is a statement about rows, not about the deployment.
 - Rotation is safe to do routinely and should be scheduled once there is anything to schedule it with.
 - Revocation is loud by design: the response reports exactly how many tokens it invalidated.
 - The parity check is a cheap tripwire for the most serious failure mode this system has.
-- `docs/threat-model.md` §5 gains an accepted risk: production key custody is pending the KMS signer.
+- The KMS path is proven by unit tests against a real Ed25519 key and by `apps/api/scripts/kms-smoke.mjs` against a live one. **The live run has not happened yet** — it needs the signing IAM user's access key. Until it does, treat "KMS works end to end" as expected rather than verified: the untested assumptions are AWS's response shapes, not our code.

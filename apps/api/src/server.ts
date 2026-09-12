@@ -14,6 +14,7 @@ const app = await buildApp({
   vera,
   masterKey: config.masterKey,
   publicUrl: config.publicUrl,
+  kms: config.kms,
   logger: true,
   evidenceProviders,
   evidenceBudgetMs: Number(process.env.VERA_EVIDENCE_BUDGET_MS ?? 1500),

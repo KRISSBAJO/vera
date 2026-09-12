@@ -21,7 +21,7 @@ import {
   importJWK,
   errors as joseErrors,
   jwtVerify,
-  SignJWT,
+  CompactSign,
 } from 'jose';
 
 // ---------- keys ----------
@@ -64,27 +64,38 @@ export function buildTenantJwks(
 
 // ---------- issuing ----------
 
-/** The signing boundary. Production implements this over a KMS; nothing else in the codebase touches private keys. */
-export interface Signer {
-  readonly kid: string;
-  /** Always stamps the decision-token typ. */
-  sign(jwt: SignJWT): Promise<string>;
-  /**
-   * Sign something that is not a decision. The type must be named explicitly, so a config bundle can
-   * never be minted by the decision path by accident, and neither can be replayed as the other.
-   */
-  signAs(jwt: SignJWT, typ: string): Promise<string>;
+/**
+ * The signing boundary (ADR-0005). Nothing else in the codebase touches private key material.
+ *
+ * The interface takes a header and a payload rather than a pre-built signer object, because a remote
+ * signer — KMS, an HSM — can only be handed bytes to sign. That shape is what lets `kmsSigner` be a
+ * true drop-in: the key never exists outside the HSM, and no call site changes.
+ */
+export interface JwsHeader {
+  alg: 'EdDSA';
+  kid: string;
+  typ: string;
 }
 
+export interface Signer {
+  readonly kid: string;
+  /** Produce a compact JWS over the protected header and payload. */
+  signCompact(header: JwsHeader, payload: Record<string, unknown>): Promise<string>;
+}
+
+/** Development signer: the private key is in this process. Production uses `kmsSigner` instead. */
 export function localSigner(key: TenantSigningKey): Signer {
-  const signAs = (jwt: SignJWT, typ: string) =>
-    jwt.setProtectedHeader({ alg: 'EdDSA', kid: key.kid, typ }).sign(key.privateKey);
   return {
     kid: key.kid,
-    sign: (jwt) => signAs(jwt, DECISION_TOKEN_TYP),
-    signAs,
+    signCompact: (header, payload) =>
+      new CompactSign(new TextEncoder().encode(JSON.stringify(payload)))
+        .setProtectedHeader({ ...header })
+        .sign(key.privateKey),
   };
 }
+
+const sign = (signer: Signer, typ: string, payload: Record<string, unknown>) =>
+  signer.signCompact({ alg: 'EdDSA', kid: signer.kid, typ }, payload);
 
 export type IssueInput = Omit<DecisionTokenClaims, 'jti' | 'iat' | 'exp' | 'single_use'> & {
   jti?: string;
@@ -108,15 +119,7 @@ export async function issueDecisionToken(input: IssueInput, signer: Signer): Pro
     exp: iat + ttl,
     single_use: true,
   });
-  const { iss, sub, aud, jti: id, iat: issuedAt, exp, ...rest } = full;
-  const jwt = new SignJWT(rest)
-    .setIssuer(iss)
-    .setSubject(sub)
-    .setAudience(aud)
-    .setJti(id)
-    .setIssuedAt(issuedAt)
-    .setExpirationTime(exp);
-  return signer.sign(jwt);
+  return sign(signer, DECISION_TOKEN_TYP, full);
 }
 
 // ---------- verifying ----------
@@ -212,14 +215,9 @@ export async function issueAdapterConfig(
     exp: iat + ttl,
     config: input.config,
   });
-  // `tenant` must be in the payload, not only in the validated object: verification re-parses the
-  // payload against the same schema, so a claim left out here fails as malformed on every read.
-  const jwt = new SignJWT({ config: claims.config, tenant: claims.tenant })
-    .setIssuer(claims.iss)
-    .setAudience(claims.aud)
-    .setIssuedAt(claims.iat)
-    .setExpirationTime(claims.exp);
-  return signer.signAs(jwt, ADAPTER_CONFIG_TYP);
+  // Every claim goes in the payload: verification re-parses it against the same schema, so a claim
+  // left out here fails as malformed on every read.
+  return sign(signer, ADAPTER_CONFIG_TYP, claims);
 }
 
 export type ConfigVerifyResult =

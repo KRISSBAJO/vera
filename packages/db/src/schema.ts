@@ -135,8 +135,14 @@ export const signingKeys = pgTable(
       .references(() => organizations.id),
     kid: text('kid').notNull(),
     publicJwk: jsonb('public_jwk').$type<Record<string, unknown>>().notNull(),
-    /** AES-256-GCM sealed private JWK (development). Production: KMS handle instead (ADR-0001). */
-    privateJwkSealed: text('private_jwk_sealed').notNull(),
+    /**
+     * Custody is one of two mutually exclusive things, enforced by the `signing_keys_one_custody`
+     * CHECK in migration 0007:
+     *  - `privateJwkSealed`: AES-256-GCM sealed private JWK, held by us (development).
+     *  - `kmsKeyArn`: the private half lives in KMS and we never see it (production, ADR-0005).
+     */
+    privateJwkSealed: text('private_jwk_sealed'),
+    kmsKeyArn: text('kms_key_arn'),
     status: text('status', { enum: ['active', 'retiring', 'revoked'] })
       .notNull()
       .default('active'),

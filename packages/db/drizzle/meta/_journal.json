@@ -50,6 +50,13 @@
       "when": 1789211229995,
       "tag": "0006_signing_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789297000000,
+      "tag": "0007_kms_custody",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { createDb } from '@vera/db';
 import { POLICY_PACK_1, POLICY_PACK_1_VERSION } from '@vera/policy-engine';
 import { addReviewer, bootstrapTenant } from './bootstrap.js';
 import { loadConfig } from './config.js';
+import { adoptKmsKey } from './keys.js';
 import { activatePolicySet } from './policy-admin.js';
 
 const usage = `vera-api <command>
@@ -13,6 +14,9 @@ const usage = `vera-api <command>
             [--timezone <tz>] [--aud <receiver aud>]
   add-user  --org-id <id> --email <email>   add a reviewer with a session token; prints the token once
   activate-policies --org-id <id>           activate the current Policy Pack 1 as a new policy-set version
+  register-kms-key  --org-id <id> --arn <key arn>
+                                            make a KMS-held key the tenant's active signer; the
+                                            outgoing key retires so in-flight tokens still verify
   serve                                     start the API (same as: node dist/server.js)
 `;
 
@@ -25,6 +29,7 @@ const { values } = parseArgs({
     email: { type: 'string' },
     timezone: { type: 'string' },
     aud: { type: 'string' },
+    arn: { type: 'string' },
   },
   allowPositionals: true,
 });
@@ -93,6 +98,38 @@ Tenant created. These secrets are shown ONCE and stored only as hashes.
     console.log(
       `activated ps_${r.version} (${r.policies} policies)${r.retired ? `, retired ps_${r.retired}` : ''}`,
     );
+    break;
+  }
+  case 'register-kms-key': {
+    const config = loadConfig();
+    const orgId = need(values['org-id'], 'org-id');
+    const keyArn = need(values.arn, 'arn');
+    if (!config.kms) {
+      console.error('no KMS configuration: set VERA_KMS_REGION and credentials (see .env.example)');
+      process.exit(2);
+    }
+    // Prove the key before adopting it: this call fails loudly on a wrong ARN, a non-Ed25519 key
+    // spec, or credentials without kms:GetPublicKey — all things we would otherwise learn at the
+    // moment a real decision needed signing.
+    const [{ KMSClient }, { kidForKeyArn, kmsPublicJwk }] = await Promise.all([
+      import('@aws-sdk/client-kms'),
+      import('@vera/signer-kms'),
+    ]);
+    const client = new KMSClient({
+      region: config.kms.region,
+      ...(config.kms.credentials ? { credentials: config.kms.credentials } : {}),
+    });
+    const kid = kidForKeyArn(keyArn);
+    const publicJwk = await kmsPublicJwk({ client, keyArn, kid });
+
+    const vera = createDb(config.databaseUrl, { max: 2 });
+    const r = await vera.withTenant(orgId, (tx) => adoptKmsKey(tx, orgId, { kid, keyArn, publicJwk }, 'cli'));
+    await vera.close();
+    console.log(`
+  active kid   ${r.kid}   (KMS: the private half never reaches this process)
+  retired kid  ${r.retired ?? '(none)'}
+  JWKS         ${config.publicUrl}/.well-known/vera/${orgId}/jwks.json
+`);
     break;
   }
   case 'serve':

@@ -1,9 +1,11 @@
+import type { KMSClient } from '@aws-sdk/client-kms';
 import { appendAudit, newId, schema, seal, type Tx, unseal } from '@vera/db';
 import { importTenantKey, issueDecisionToken, localSigner, type Signer } from '@vera/decision-token';
 import { type CompiledPolicySet, compilePolicySet } from '@vera/policy-engine';
 import { TenantJwksSchema } from '@vera/schemas';
 import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { decodeJwt } from 'jose';
+import type { KmsConfig } from './config.js';
 import { notFound } from './errors.js';
 
 const { policySets, signingKeys, decisionTokens } = schema;
@@ -11,6 +13,11 @@ const { policySets, signingKeys, decisionTokens } = schema;
 export interface ServiceContext {
   masterKey: Buffer;
   publicUrl: string;
+  /**
+   * Set when KMS signing is configured. A tenant whose key row carries a `kms_key_arn` cannot be
+   * signed for without it — we refuse rather than quietly falling back to a local key.
+   */
+  kms?: KmsConfig | undefined;
 }
 
 // ---------- policy sets ----------
@@ -47,22 +54,66 @@ export async function activePolicySet(
 
 const signerCache = new Map<string, Signer>();
 
-/** Active signing key for the tenant, unsealed once and cached by kid. Production swaps this for a KMS Signer (ADR-0001). */
+/**
+ * A KMS client, built once per region and shared. The AWS SDK is imported dynamically so that
+ * development, tests, and every adapter never load it — this is the only place in the running system
+ * that needs it (ADR-0005).
+ */
+const kmsClients = new Map<string, Promise<KMSClient>>();
+
+function kmsClientFor(cfg: KmsConfig): Promise<KMSClient> {
+  const key = `${cfg.region}:${cfg.credentials?.accessKeyId ?? 'ambient'}`;
+  let client = kmsClients.get(key);
+  if (!client) {
+    client = import('@aws-sdk/client-kms').then(
+      (m) =>
+        new m.KMSClient({ region: cfg.region, ...(cfg.credentials ? { credentials: cfg.credentials } : {}) }),
+    );
+    kmsClients.set(key, client);
+  }
+  return client;
+}
+
+/**
+ * Active signing key for the tenant, cached by kid.
+ *
+ * Custody is whatever the key row says, not whatever the environment offers: a row with a
+ * `kms_key_arn` signs through KMS or not at all. Falling back to a local key when KMS is unreachable
+ * would turn a signing outage into a silent downgrade of the key custody the tenant was promised
+ * (threat T14) — and tokens signed by the wrong key fail verification anyway, so the fallback buys
+ * nothing even on its own terms.
+ */
 export async function tenantSigner(tx: Tx, ctx: ServiceContext, orgId: string): Promise<Signer> {
   const [row] = await tx
-    .select({ kid: signingKeys.kid, publicJwk: signingKeys.publicJwk, sealed: signingKeys.privateJwkSealed })
+    .select({
+      kid: signingKeys.kid,
+      publicJwk: signingKeys.publicJwk,
+      sealed: signingKeys.privateJwkSealed,
+      kmsKeyArn: signingKeys.kmsKeyArn,
+    })
     .from(signingKeys)
     .where(and(eq(signingKeys.orgId, orgId), eq(signingKeys.status, 'active')))
     .limit(1);
   if (!row) throw notFound('active signing key');
   const cacheKey = `${orgId}:${row.kid}`;
-  let signer = signerCache.get(cacheKey);
-  if (!signer) {
+  const cached = signerCache.get(cacheKey);
+  if (cached) return cached;
+
+  let signer: Signer;
+  if (row.kmsKeyArn) {
+    if (!ctx.kms) {
+      throw new Error(
+        `signing key ${row.kid} is held in KMS but this process has no KMS configuration (set VERA_KMS_REGION and credentials)`,
+      );
+    }
+    const { kmsSigner } = await import('@vera/signer-kms');
+    signer = kmsSigner({ client: await kmsClientFor(ctx.kms), keyArn: row.kmsKeyArn, kid: row.kid });
+  } else {
+    if (!row.sealed) throw new Error(`signing key ${row.kid} has neither a sealed private key nor a KMS ARN`);
     const privateJwk = JSON.parse(unseal(row.sealed, ctx.masterKey)) as Record<string, unknown>;
-    const key = await importTenantKey(privateJwk, row.publicJwk);
-    signer = localSigner(key);
-    signerCache.set(cacheKey, signer);
+    signer = localSigner(await importTenantKey(privateJwk, row.publicJwk));
   }
+  signerCache.set(cacheKey, signer);
   return signer;
 }
 
