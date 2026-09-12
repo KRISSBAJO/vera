@@ -1,4 +1,4 @@
-import { newId, schema, seal, type Tx, unseal } from '@vera/db';
+import { appendAudit, newId, schema, seal, type Tx, unseal } from '@vera/db';
 import { importTenantKey, issueDecisionToken, localSigner, type Signer } from '@vera/decision-token';
 import { type CompiledPolicySet, compilePolicySet } from '@vera/policy-engine';
 import { TenantJwksSchema } from '@vera/schemas';
@@ -90,6 +90,8 @@ export interface IssueParams {
   approver?: string[] | undefined;
   policySetVersion: string;
   ttlSeconds?: number | undefined;
+  /** Who caused the signature, for the 1:1 audit parity check (SR-11). */
+  auditActor: string;
 }
 
 /** Issue a decision token and record its jti for single-use enforcement (SR-10). */
@@ -120,8 +122,17 @@ export async function issueAndRecordToken(tx: Tx, ctx: ServiceContext, p: IssueP
     decisionId: p.decisionId,
     aud: p.aud,
     actionHash: p.actionHash,
+    signingKid: signer.kid,
     tokenSealed: seal(token, ctx.masterKey),
     expiresAt: new Date(exp * 1000),
+  });
+  // SR-11: one audit event per signature, so `signingParity` can prove nothing signed off-path.
+  await appendAudit(tx, p.orgId, 'token.issued', p.auditActor, {
+    jti,
+    decision_id: p.decisionId,
+    kid: signer.kid,
+    aud: p.aud,
+    expires_at: new Date(exp * 1000).toISOString(),
   });
   return token;
 }

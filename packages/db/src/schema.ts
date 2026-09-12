@@ -286,6 +286,8 @@ export const decisionTokens = pgTable(
       .references(() => decisions.id),
     aud: text('aud').notNull(),
     actionHash: text('action_hash').notNull(),
+    /** Which key signed it — so revoking a key can say exactly how many tokens it just invalidated. */
+    signingKid: text('signing_kid'),
     /** The token itself, sealed under the master key, so the receiver can collect it by polling. Never logged. */
     tokenSealed: text('token_sealed'),
     expiresAt: ts('expires_at').notNull(),

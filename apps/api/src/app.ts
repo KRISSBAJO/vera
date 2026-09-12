@@ -35,6 +35,7 @@ import {
   retractObservation,
 } from './baselines.js';
 import { conflict, forbidden, HttpError, notFound } from './errors.js';
+import { listKeys, revokeKey, rotateKey, signingParity } from './keys.js';
 import { baselineExplain, policyPrecision } from './reports.js';
 import {
   activePolicySet,
@@ -313,6 +314,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             actingFor: body.acting_for?.id,
             policySetVersion: ps.version,
             ttlSeconds: tenant.tokenTtlSeconds?.allow,
+            auditActor: `key:${key.keyId}`,
           });
         }
         let reviewUrl: string | undefined;
@@ -526,6 +528,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             actingFor: actingFor?.id,
             approver: approverRows.map((a) => a.email),
             policySetVersion: decision.policySetVersion,
+            auditActor: `user:${reviewer.userId}`,
           });
           await appendAudit(tx, reviewer.orgId, 'review.approved', `user:${reviewer.userId}`, {
             decision_id: decision.id,
@@ -664,6 +667,111 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         }
       });
       return { recorded: true as const };
+    },
+  );
+
+  /** Key management is an owner's job, not a reviewer's: revoking a key invalidates live approvals. */
+  const assertAdmin = async (tx: Tx, reviewer: { orgId: string; userId: string }) => {
+    const [me] = await tx.select().from(users).where(eq(users.id, reviewer.userId)).limit(1);
+    if (!me?.roles.includes('admin')) throw forbidden('ADMIN_REQUIRED', 'this needs an administrator');
+    return me;
+  };
+
+  // ---------- signing keys (SR-11, threat T14) ----------
+  const KeySchema = z.object({
+    kid: z.string(),
+    status: z.enum(['active', 'retiring', 'revoked']),
+    created_at: z.string(),
+    rotated_at: z.string().nullable(),
+    tokens_signed: z.number(),
+  });
+
+  app.get(
+    '/v1/keys',
+    {
+      onRequest: requireReviewer(vera),
+      schema: {
+        response: {
+          200: z.object({
+            keys: z.array(KeySchema),
+            parity: z.object({
+              tokens_issued: z.number(),
+              signatures_audited: z.number(),
+              balanced: z.boolean(),
+              note: z.string(),
+            }),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      return vera.withTenant(reviewer.orgId, async (tx) => {
+        await assertAdmin(tx, reviewer);
+        return { keys: await listKeys(tx, reviewer.orgId), parity: await signingParity(tx, reviewer.orgId) };
+      });
+    },
+  );
+
+  app.post(
+    '/v1/keys/rotate',
+    {
+      onRequest: requireReviewer(vera),
+      schema: {
+        response: { 200: z.object({ kid: z.string(), retired: z.string().nullable(), note: z.string() }) },
+      },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      return vera.withTenant(reviewer.orgId, async (tx) => {
+        await assertAdmin(tx, reviewer);
+        const r = await rotateKey(tx, reviewer.orgId, deps.masterKey, `user:${reviewer.userId}`);
+        return {
+          ...r,
+          note: r.retired
+            ? `New tokens are signed with ${r.kid}. ${r.retired} still verifies until its last token expires, so nothing in flight breaks.`
+            : `New tokens are signed with ${r.kid}.`,
+        };
+      });
+    },
+  );
+
+  app.post(
+    '/v1/keys/:kid/revoke',
+    {
+      onRequest: requireReviewer(vera),
+      schema: {
+        params: z.object({ kid: z.string() }),
+        body: z.object({ reason: z.string().min(3).max(500) }),
+        response: {
+          200: z.object({
+            revoked: z.string(),
+            replacement: z.string().nullable(),
+            tokens_invalidated: z.number(),
+            note: z.string(),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      return vera.withTenant(reviewer.orgId, async (tx) => {
+        await assertAdmin(tx, reviewer);
+        const r = await revokeKey(
+          tx,
+          reviewer.orgId,
+          req.params.kid,
+          deps.masterKey,
+          `user:${reviewer.userId}`,
+          req.body.reason,
+        );
+        return {
+          revoked: r.revoked,
+          replacement: r.replacement,
+          tokens_invalidated: r.tokensInvalidated,
+          note: `${r.tokensInvalidated} token(s) signed by ${r.revoked} stopped verifying immediately, approved or not.${r.replacement ? ` New signing key: ${r.replacement}.` : ''}`,
+        };
+      });
     },
   );
 

@@ -218,6 +218,7 @@ State these to design partners in writing.
 5. **Identity is asserted until an IdP integration exists.** SoD holds against the key owner and the asserted identity; shared keys degrade to quorum.
 6. **Offline token receivers** cannot enforce single use; they get expiry only.
 7. **The LLM helpers can be wrong.** They are designed so that wrong is harmless to the decision; they can still mislead a reviewer's *reading*, which is why the structured facts are always shown alongside.
+8. **Key custody is development-grade until the KMS signer exists** (ADR-0005). Private keys are sealed with `VERA_MASTER_KEY` and stored in the database, so an operator holding both can extract one, and `exportPrivateJwk` is a real export path. Rotation, revocation and signature parity are implemented; the custody boundary is not. Until a `kmsSigner` lands, VERA should not hold signing keys for anyone else's production traffic.
 
 ---
 

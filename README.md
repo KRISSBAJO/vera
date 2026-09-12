@@ -10,7 +10,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `docs/competitive-scan-2026-09.md` | Landscape scan behind the brief's §2 — ~75 sources. |
 | `docs/threat-model.md` | Build deliverable 1: trust boundaries, threats T01–T25, security requirements SR-01–SR-22, accepted risks, open questions. |
 | `docs/boundary-and-assumptions.md` | Build deliverable 1: the product boundary restated, and 17 unsafe or ambiguous assumptions found in the brief with resolutions. |
-| `docs/decisions/` | Architecture decision records: 0001 tech stack, 0002 Claude Code adapter shape. |
+| `docs/decisions/` | Architecture decision records: 0001 tech stack, 0002 Claude Code adapter shape, 0003 per-user keys, 0004 Cedar closed records, 0005 key custody. |
 | `docs/word/` | Word exports of the above, generated from the markdown — never edited by hand. |
 
 ## Code
@@ -67,7 +67,7 @@ Tests run against the Docker Postgres: `corepack pnpm turbo run test`.
 2. Contracts: schemas, canonicalization, decision token — done (62 tests)
 3. Vertical slice: Claude Code hook → `/v1/decide` → review queue → signed token → callback — **done** (Cedar spike, database with RLS, decision engine, API, GitHub evidence provider, `vera-hook` adapter; 168 tests). First dogfood session ran on this repo and produced Policy Pack 1 v2 and the harness-tool classifier fixes.
 4. Baselines, outcomes, second adapter — **done** (`packages/baseline-engine`, `GET /v1/baselines`, `GET /v1/reports/policy-precision`, `packages/adapters/openai-agents`; 235 tests).
-5. Hardening, dashboard v0 — **redaction + the review queue done**. Remaining: KMS signing and key rotation, tenant-signed class tables, Slack notifications.
+5. Hardening, dashboard v0 — **redaction, the review queue, and key rotation/revocation done**. Remaining: the KMS signer (ADR-0005 — custody is development-grade until it lands), tenant-signed class tables, Slack notifications.
 6. Design-partner packaging
 
 Days 1–10 also run the validation interviews (brief Appendix A); the day-10 gate decides whether Policy Pack 1 stays on coding agents.
