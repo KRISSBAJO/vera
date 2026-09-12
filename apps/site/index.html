@@ -1,586 +1,836 @@
 <title>VERA Decision Firewall</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=Chivo:wght@300;400;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..900&family=Figtree:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
 
 <style>
-  /* ── Dark-first. :root carries the complete default (dark) palette; light is the override. ───── */
+  /* ─────────────────────────────────────────────────────────────────────────────────────────────
+     Light-first. Paper, ink, hairline — and the only hue in the whole design is a verdict.
+     ───────────────────────────────────────────────────────────────────────────────────────── */
   :root {
-    --ground: #0b0c0e;
-    --panel: #131519;
-    --panel-2: #191c21;
-    --rule: #24272d;
-    --rule-strong: #343941;
-    --ink: #e8e9ec;
-    --ink-2: #b6bbc4;
-    --dim: #878d99;
-    --allow: #35c07a;
-    --review: #e0a431;
-    --block: #e5484d;
-    --stamp-bg: rgba(255, 255, 255, 0.03);
-    --shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+    --paper: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f5f5f3;
+    --sunken: #f0f0ed;
+    --hairline: #e6e6e2;
+    --hairline-2: #d3d3cd;
+    --ink: #0a0a0b;
+    --ink-2: #3f424a;
+    --dim: #7d8089;
+    --faint: #a8aab1;
+
+    --allow: #0b7a4b;
+    --allow-wash: #edf7f1;
+    --review: #a86a05;
+    --review-wash: #fdf5e8;
+    --block: #c1322e;
+    --block-wash: #fdf0ef;
+
+    --lift-1: 0 1px 2px rgba(16, 18, 22, 0.04), 0 2px 6px rgba(16, 18, 22, 0.03);
+    --lift-2: 0 1px 2px rgba(16, 18, 22, 0.05), 0 4px 12px rgba(16, 18, 22, 0.05), 0 16px 40px rgba(16, 18, 22, 0.05);
+    --lift-3: 0 2px 4px rgba(16, 18, 22, 0.05), 0 12px 28px rgba(16, 18, 22, 0.07), 0 40px 80px rgba(16, 18, 22, 0.07);
+    --inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 
     --display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
-    --body: 'Chivo', 'Helvetica Neue', Arial, sans-serif;
+    --body: 'Figtree', 'Helvetica Neue', Arial, sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
-    --measure: 66ch;
-    --gutter: clamp(1.25rem, 4vw, 3rem);
-    --max: 1180px;
-    color-scheme: dark;
+    --gutter: clamp(1.25rem, 4.5vw, 4rem);
+    --max: 1240px;
+    --grain: 0.02;
+    color-scheme: light;
   }
 
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme='dark']) {
-      --ground: #f6f6f4;
-      --panel: #fff;
-      --panel-2: #f1f1ee;
-      --rule: #e0e0db;
-      --rule-strong: #c9c9c2;
-      --ink: #101114;
-      --ink-2: #3b3f46;
-      --dim: #6b7079;
-      --allow: #14784b;
-      --review: #8f5d0c;
-      --block: #bb2b30;
-      --stamp-bg: rgba(0, 0, 0, 0.025);
-      --shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
-      color-scheme: light;
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --paper: #0a0b0d;
+      --surface: #121317;
+      --surface-2: #16181c;
+      --sunken: #0e0f12;
+      --hairline: #25272d;
+      --hairline-2: #33363e;
+      --ink: #f2f3f5;
+      --ink-2: #b9bdc6;
+      --dim: #878b95;
+      --faint: #5f636d;
+
+      --allow: #3fc487;
+      --allow-wash: #10261c;
+      --review: #e5ab46;
+      --review-wash: #2a2013;
+      --block: #f06259;
+      --block-wash: #2b1614;
+
+      --lift-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+      --lift-2: 0 2px 8px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.4);
+      --lift-3: 0 4px 12px rgba(0, 0, 0, 0.55), 0 32px 72px rgba(0, 0, 0, 0.5);
+      --inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      --grain: 0.035;
+      color-scheme: dark;
     }
   }
 
-  :root[data-theme='light'] {
-    --ground: #f6f6f4;
-    --panel: #fff;
-    --panel-2: #f1f1ee;
-    --rule: #e0e0db;
-    --rule-strong: #c9c9c2;
-    --ink: #101114;
-    --ink-2: #3b3f46;
-    --dim: #6b7079;
-    --allow: #14784b;
-    --review: #8f5d0c;
-    --block: #bb2b30;
-    --stamp-bg: rgba(0, 0, 0, 0.025);
-    --shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
-    color-scheme: light;
+  :root[data-theme='dark'] {
+    --paper: #0a0b0d;
+    --surface: #121317;
+    --surface-2: #16181c;
+    --sunken: #0e0f12;
+    --hairline: #25272d;
+    --hairline-2: #33363e;
+    --ink: #f2f3f5;
+    --ink-2: #b9bdc6;
+    --dim: #878b95;
+    --faint: #5f636d;
+    --allow: #3fc487;
+    --allow-wash: #10261c;
+    --review: #e5ab46;
+    --review-wash: #2a2013;
+    --block: #f06259;
+    --block-wash: #2b1614;
+    --lift-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --lift-2: 0 2px 8px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.4);
+    --lift-3: 0 4px 12px rgba(0, 0, 0, 0.55), 0 32px 72px rgba(0, 0, 0, 0.5);
+    --inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    --grain: 0.035;
+    color-scheme: dark;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
 
+  /* The hero's grid bleeds past both edges on purpose. `clip` contains it without creating a scroll
+     container — `overflow: hidden` here would break the sticky masthead. */
+  html { overflow-x: clip; }
+
   body {
-    background: var(--ground);
+    background: var(--paper);
     color: var(--ink);
     font-family: var(--body);
-    font-weight: 300;
-    font-size: 16px;
-    line-height: 1.6;
+    font-size: 16.5px;
+    line-height: 1.62;
+    font-weight: 400;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  /* Paper grain. Enough to kill the flatness, not enough to notice. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: var(--grain);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
   .wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
 
-  h1, h2, h3 {
+  h1, h2, h3, h4 {
     font-family: var(--display);
-    font-variation-settings: 'wdth' 118;
     font-weight: 700;
-    line-height: 1.04;
-    letter-spacing: -0.02em;
+    line-height: 1.03;
+    letter-spacing: -0.033em;
     text-wrap: balance;
     margin: 0;
   }
-
   p { margin: 0; }
   a { color: inherit; }
+  ::selection { background: var(--ink); color: var(--paper); }
 
   .eyebrow {
     font-family: var(--mono);
     font-size: 0.6875rem;
     font-weight: 500;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--dim);
   }
-
-  code, .mono { font-family: var(--mono); font-size: 0.8125em; }
+  code { font-family: var(--mono); font-size: 0.86em; }
+  .tnum { font-variant-numeric: tabular-nums; }
 
   /* ── Masthead ─────────────────────────────────────────────────────────────────────────────── */
-  header.masthead {
-    border-bottom: 1px solid var(--rule);
+  .masthead {
     position: sticky;
     top: 0;
-    z-index: 20;
-    background: color-mix(in srgb, var(--ground) 88%, transparent);
-    backdrop-filter: blur(10px);
+    z-index: 50;
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
+    backdrop-filter: saturate(180%) blur(14px);
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.25s, background 0.25s;
   }
-  .masthead .wrap {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    height: 60px;
+  .masthead.is-stuck { border-bottom-color: var(--hairline); }
+  .masthead .wrap { display: flex; align-items: center; gap: 1.25rem; height: 66px; }
+
+  .mark { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; }
+  .mark__glyph {
+    width: 22px; height: 22px;
+    border: 1.5px solid var(--ink);
+    border-radius: 3px;
+    position: relative;
+    flex: none;
   }
-  .wordmark {
+  .mark__glyph::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-left: 1.5px solid var(--ink);
+    border-bottom: 1.5px solid var(--ink);
+    transform: rotate(-45deg) translate(0.5px, -1px);
+    transform-origin: center;
+  }
+  .mark__text {
     font-family: var(--display);
-    font-variation-settings: 'wdth' 125;
+    font-variation-settings: 'wdth' 118;
     font-weight: 800;
     font-size: 1.0625rem;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.055em;
   }
-  .masthead nav { margin-left: auto; display: flex; gap: 1.5rem; align-items: center; }
-  .masthead nav a {
-    font-size: 0.8125rem;
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    color: var(--dim);
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    border-radius: 100px;
+    padding: 0.24rem 0.65rem;
+    box-shadow: var(--lift-1);
+  }
+  .pill__dot { width: 5px; height: 5px; border-radius: 50%; background: var(--allow); flex: none; }
+
+  .masthead nav { margin-left: auto; display: flex; align-items: center; gap: 1.6rem; }
+  .masthead nav a.lnk {
+    font-size: 0.875rem;
     color: var(--dim);
     text-decoration: none;
     transition: color 0.15s;
   }
-  .masthead nav a:hover { color: var(--ink); }
-  @media (max-width: 720px) { .masthead nav .hide-sm { display: none; } }
+  .masthead nav a.lnk:hover { color: var(--ink); }
+  @media (max-width: 860px) { .hide-md { display: none !important; } }
+  @media (max-width: 560px) { .hide-sm { display: none !important; } }
 
   .btn {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    font-family: var(--mono);
-    font-size: 0.75rem;
+    font-family: var(--body);
+    font-size: 0.9rem;
     font-weight: 500;
-    letter-spacing: 0.04em;
-    padding: 0.5rem 0.9rem;
-    border: 1px solid var(--rule-strong);
-    background: var(--panel);
+    padding: 0.58rem 1.05rem;
+    border-radius: 7px;
+    border: 1px solid var(--hairline-2);
+    background: var(--surface);
     color: var(--ink);
     text-decoration: none;
-    border-radius: 2px;
-    transition: border-color 0.15s, background 0.15s;
+    box-shadow: var(--lift-1), var(--inset);
+    transition: transform 0.12s cubic-bezier(.3,.8,.4,1), box-shadow 0.2s, border-color 0.2s;
+    white-space: nowrap;
   }
-  .btn:hover { border-color: var(--ink-2); background: var(--panel-2); }
-  .btn--solid { background: var(--ink); color: var(--ground); border-color: var(--ink); }
-  .btn--solid:hover { background: var(--ink-2); border-color: var(--ink-2); }
-  :focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+  .btn:hover { transform: translateY(-1px); box-shadow: var(--lift-2), var(--inset); }
+  .btn:active { transform: translateY(0); }
+  .btn--ink {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+    box-shadow: 0 1px 2px rgba(16,18,22,.18), 0 6px 16px rgba(16,18,22,.16);
+  }
+  .btn--ink:hover { box-shadow: 0 2px 6px rgba(16,18,22,.2), 0 12px 28px rgba(16,18,22,.2); }
+  .btn--lg { font-size: 1rem; padding: 0.78rem 1.4rem; border-radius: 9px; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 3px; }
 
   /* ── Hero ─────────────────────────────────────────────────────────────────────────────────── */
-  .hero { padding-block: clamp(3.5rem, 9vw, 6.5rem) clamp(2rem, 5vw, 3.5rem); }
-  .hero h1 {
-    font-size: clamp(2.4rem, 6.4vw, 4.5rem);
-    max-width: 17ch;
-    margin-bottom: 1.5rem;
+  .hero { position: relative; padding-block: clamp(3.5rem, 8vw, 7rem) clamp(2rem, 4vw, 3rem); }
+  .hero::before {
+    /* Engineering paper: a fine grid that fades out. Depth without decoration. */
+    content: '';
+    position: absolute;
+    inset: -20% -25% auto;
+    height: 150%;
+    z-index: -1;
+    background-image:
+      linear-gradient(to right, var(--hairline) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--hairline) 1px, transparent 1px);
+    background-size: 68px 68px;
+    -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 28%, #000 0%, transparent 72%);
+    mask-image: radial-gradient(ellipse 60% 55% at 50% 28%, #000 0%, transparent 72%);
+    opacity: 0.75;
   }
-  .hero h1 em { font-style: normal; color: var(--dim); }
+
+  .hero__badge { display: inline-flex; margin-bottom: 1.6rem; }
+  .hero h1 {
+    font-variation-settings: 'wdth' 108;
+    font-weight: 800;
+    font-size: clamp(2.7rem, 7.4vw, 5.75rem);
+    max-width: 15ch;
+    margin-bottom: 1.6rem;
+  }
+  .hero h1 .quiet {
+    display: block;
+    color: var(--dim);
+    font-weight: 500;
+    font-variation-settings: 'wdth' 100;
+    letter-spacing: -0.028em;
+  }
   .hero .lede {
-    font-size: clamp(1.0625rem, 1.6vw, 1.25rem);
+    font-size: clamp(1.0625rem, 1.5vw, 1.3125rem);
+    line-height: 1.55;
     color: var(--ink-2);
-    max-width: 56ch;
-    margin-bottom: 2rem;
+    max-width: 54ch;
+    margin-bottom: 2.2rem;
+    font-weight: 350;
   }
   .hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+  .hero-actions .aside { font-size: 0.875rem; color: var(--faint); margin-left: 0.35rem; }
 
-  /* ── The three-part definition strip ──────────────────────────────────────────────────────── */
-  .definition {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    border-top: 1px solid var(--rule);
-    border-bottom: 1px solid var(--rule);
-    margin-block: clamp(2.5rem, 6vw, 4rem);
-  }
-  .definition > div { padding: 1.5rem 1.5rem 1.5rem 0; border-right: 1px solid var(--rule); }
-  .definition > div:last-child { border-right: 0; padding-right: 0; }
-  .definition > div + div { padding-left: 1.5rem; }
-  .definition dt {
-    font-family: var(--mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--dim);
-    margin-bottom: 0.5rem;
-  }
-  .definition dd { margin: 0; font-size: 1rem; color: var(--ink-2); }
-  .definition .now { color: var(--ink); font-weight: 600; }
-  @media (max-width: 760px) {
-    .definition { grid-template-columns: 1fr; }
-    .definition > div { border-right: 0; border-bottom: 1px solid var(--rule); padding: 1.1rem 0; }
-    .definition > div + div { padding-left: 0; }
-    .definition > div:last-child { border-bottom: 0; }
-  }
-
-  /* ── Decision record ──────────────────────────────────────────────────────────────────────── */
-  .record {
-    border: 1px solid var(--rule);
-    background: var(--panel);
-    border-radius: 3px;
+  /* ── The instrument ───────────────────────────────────────────────────────────────────────── */
+  .instrument {
+    margin-top: clamp(2.75rem, 6vw, 4.5rem);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    box-shadow: var(--lift-3);
     overflow: hidden;
-    box-shadow: var(--shadow);
   }
-  .record__tabs { display: flex; border-bottom: 1px solid var(--rule); background: var(--panel-2); }
-  .record__tabs button {
-    flex: 1;
-    appearance: none;
-    background: none;
-    border: 0;
-    border-right: 1px solid var(--rule);
-    padding: 0.85rem 1rem;
+  .instrument__chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.7rem 1rem 0.7rem 1.1rem;
+    border-bottom: 1px solid var(--hairline);
+    background: linear-gradient(to bottom, var(--surface), var(--surface-2));
+  }
+  .instrument__title {
     font-family: var(--mono);
     font-size: 0.6875rem;
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--dim);
-    cursor: pointer;
-    transition: color 0.15s, background 0.15s;
-    text-align: left;
-  }
-  .record__tabs button:last-child { border-right: 0; }
-  .record__tabs button:hover { color: var(--ink-2); }
-  .record__tabs button[aria-selected='true'] { color: var(--ink); background: var(--panel); }
-  .record__tabs button[aria-selected='true'][data-v='BLOCK'] { box-shadow: inset 0 -2px 0 var(--block); }
-  .record__tabs button[aria-selected='true'][data-v='REVIEW'] { box-shadow: inset 0 -2px 0 var(--review); }
-  .record__tabs button[aria-selected='true'][data-v='ALLOW'] { box-shadow: inset 0 -2px 0 var(--allow); }
-
-  .record__body { padding: clamp(1.25rem, 3vw, 2rem); }
-  .record__row { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
-  .record__cmd { flex: 1 1 22rem; min-width: 0; }
-
-  .field-label {
-    font-family: var(--mono);
-    font-size: 0.625rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--dim);
-    display: block;
-    margin-bottom: 0.4rem;
   }
-  .cmdline {
+  .seg {
+    margin-left: auto;
+    display: flex;
+    background: var(--sunken);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    border-radius: 6px;
+    padding: 0.34rem 0.72rem;
     font-family: var(--mono);
-    font-size: 0.875rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+  }
+  .seg button:hover { color: var(--ink-2); }
+  .seg button[aria-selected='true'] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--lift-1);
+  }
+
+  .instrument__body { padding: clamp(1.1rem, 2.6vw, 2rem); }
+
+  .io {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1.25rem;
+    align-items: stretch;
+  }
+  @media (max-width: 720px) { .io { grid-template-columns: 1fr; } }
+
+  .field { min-width: 0; }
+  .field__label {
+    font-family: var(--mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--faint);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  .cmd {
+    font-family: var(--mono);
+    font-size: clamp(0.8125rem, 1.35vw, 0.9375rem);
     line-height: 1.7;
     color: var(--ink);
-    background: var(--stamp-bg);
-    border: 1px solid var(--rule);
-    border-left: 2px solid var(--rule-strong);
-    padding: 0.75rem 0.9rem;
+    background: var(--sunken);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
     overflow-x: auto;
     white-space: pre;
-    border-radius: 2px;
+    box-shadow: inset 0 1px 3px rgba(16, 18, 22, 0.04);
   }
-  .cmdline .flag { color: var(--block); }
+  .cmd .tok-cmd { color: var(--ink); font-weight: 600; }
+  .cmd .tok-flag { color: var(--block); font-weight: 600; }
+  .cmd .tok-arg { color: var(--ink-2); }
 
-  .stamp {
-    flex: 0 0 auto;
+  .verdict {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.15rem;
+    min-width: 11.5rem;
+    padding: 1rem 1.35rem;
+    border-radius: 12px;
     border: 1px solid currentColor;
-    border-radius: 2px;
-    padding: 0.6rem 1rem 0.7rem;
     text-align: center;
-    min-width: 8.5rem;
   }
-  .stamp__verdict {
+  .verdict__word {
     font-family: var(--display);
-    font-variation-settings: 'wdth' 125;
+    font-variation-settings: 'wdth' 120;
     font-weight: 800;
-    font-size: 1.5rem;
-    letter-spacing: 0.04em;
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    letter-spacing: 0.01em;
     line-height: 1;
-    display: block;
   }
-  .stamp__sub {
+  .verdict__note {
     font-family: var(--mono);
     font-size: 0.625rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    opacity: 0.75;
+    opacity: 0.8;
   }
-  [data-verdict='BLOCK'] .stamp { color: var(--block); }
-  [data-verdict='REVIEW'] .stamp { color: var(--review); }
-  [data-verdict='ALLOW'] .stamp { color: var(--allow); }
+  [data-verdict='BLOCK'] .verdict { color: var(--block); background: var(--block-wash); }
+  [data-verdict='REVIEW'] .verdict { color: var(--review); background: var(--review-wash); }
+  [data-verdict='ALLOW'] .verdict { color: var(--allow); background: var(--allow-wash); }
 
-  .codes { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.25rem; }
-  .code-chip {
+  /* Gates */
+  .gates {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+  }
+  @media (max-width: 760px) { .gates { grid-template-columns: repeat(2, 1fr); } }
+  .gate {
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 0.7rem 0.8rem 0.75rem;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .gate__name {
+    font-family: var(--mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--faint);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+  }
+  .gate__led {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--hairline-2);
+    flex: none;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .gate__value { font-size: 0.8125rem; color: var(--ink-2); line-height: 1.45; }
+  .gate.is-on { border-color: var(--hairline-2); box-shadow: var(--lift-1); }
+  .gate.is-on .gate__led { background: var(--allow); box-shadow: 0 0 0 3px color-mix(in srgb, var(--allow) 18%, transparent); }
+  .gate.is-on[data-tone='stop'] .gate__led { background: var(--block); box-shadow: 0 0 0 3px color-mix(in srgb, var(--block) 18%, transparent); }
+  .gate.is-on[data-tone='hold'] .gate__led { background: var(--review); box-shadow: 0 0 0 3px color-mix(in srgb, var(--review) 18%, transparent); }
+  .gate.is-on[data-tone='stop'] .gate__value { color: var(--block); }
+  .gate.is-on[data-tone='hold'] .gate__value { color: var(--review); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .gate { opacity: 0.55; transform: translateY(2px); transition: opacity .32s ease, transform .32s ease, border-color .3s, box-shadow .3s; }
+    .gate.is-on { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .gate { opacity: 1; } }
+
+  .codes { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.15rem; }
+  .chip {
     font-family: var(--mono);
     font-size: 0.6875rem;
-    padding: 0.25rem 0.5rem;
-    border: 1px solid var(--rule-strong);
-    border-radius: 2px;
+    padding: 0.28rem 0.55rem;
+    border-radius: 6px;
+    border: 1px solid var(--hairline);
+    background: var(--surface-2);
     color: var(--ink-2);
     white-space: nowrap;
   }
-  .code-chip[data-sev='high'] { color: var(--block); border-color: color-mix(in srgb, var(--block) 45%, transparent); }
-  .code-chip[data-sev='med'] { color: var(--review); border-color: color-mix(in srgb, var(--review) 45%, transparent); }
-  .code-chip[data-sev='ok'] { color: var(--allow); border-color: color-mix(in srgb, var(--allow) 45%, transparent); }
+  .chip[data-sev='high'] { color: var(--block); background: var(--block-wash); border-color: color-mix(in srgb, var(--block) 22%, transparent); }
+  .chip[data-sev='med'] { color: var(--review); background: var(--review-wash); border-color: color-mix(in srgb, var(--review) 22%, transparent); }
+  .chip[data-sev='ok'] { color: var(--allow); background: var(--allow-wash); border-color: color-mix(in srgb, var(--allow) 22%, transparent); }
 
-  .record__why {
-    margin-top: 1.25rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--rule);
+  .why {
+    margin-top: 1.15rem;
+    padding-top: 1.15rem;
+    border-top: 1px solid var(--hairline);
     color: var(--ink-2);
     font-size: 0.9375rem;
-    max-width: var(--measure);
+    max-width: 74ch;
   }
-  .record__why strong { color: var(--ink); font-weight: 600; }
-  .record__meta {
-    margin-top: 1rem;
+  .why strong { color: var(--ink); font-weight: 600; }
+  .meta {
+    margin-top: 0.85rem;
     font-family: var(--mono);
     font-size: 0.6875rem;
-    color: var(--dim);
+    color: var(--faint);
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem 1.25rem;
-  }
-  .record__meta span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .record__body { animation: settle 0.22s ease-out; }
-    @keyframes settle { from { opacity: 0.55; } to { opacity: 1; } }
+    gap: 0.3rem 1.4rem;
   }
 
   /* ── Sections ─────────────────────────────────────────────────────────────────────────────── */
-  section { padding-block: clamp(3rem, 8vw, 5.5rem); }
-  .section-head { margin-bottom: 2.5rem; max-width: var(--measure); }
-  .section-head h2 { font-size: clamp(1.75rem, 3.6vw, 2.5rem); margin-bottom: 0.85rem; }
-  .section-head p { color: var(--ink-2); font-size: 1.0625rem; }
-
-  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--rule); }
-  .split > div { padding: 1.75rem 0; }
-  .split > div:first-child { padding-right: 2rem; border-right: 1px solid var(--rule); }
-  .split > div:last-child { padding-left: 2rem; }
-  @media (max-width: 780px) {
-    .split { grid-template-columns: 1fr; }
-    .split > div:first-child { padding-right: 0; border-right: 0; border-bottom: 1px solid var(--rule); }
-    .split > div:last-child { padding-left: 0; }
+  section { padding-block: clamp(3.5rem, 9vw, 7rem); }
+  .shead { margin-bottom: clamp(2rem, 4vw, 3.25rem); max-width: 62ch; }
+  .shead__idx {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin-bottom: 1.1rem;
   }
-  .split h3 { font-size: 1.25rem; margin-bottom: 0.75rem; font-variation-settings: 'wdth' 112; }
-  .split .tag {
+  .shead__idx::after { content: ''; height: 1px; flex: 1; background: var(--hairline); }
+  .shead h2 { font-size: clamp(1.9rem, 4.2vw, 3.1rem); font-variation-settings: 'wdth' 104; margin-bottom: 1rem; }
+  .shead p { color: var(--ink-2); font-size: clamp(1rem, 1.3vw, 1.125rem); font-weight: 350; }
+
+  /* Definition triptych */
+  .tript { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  @media (max-width: 800px) { .tript { grid-template-columns: 1fr; } }
+  .tript__card {
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 1.5rem 1.5rem 1.65rem;
+    box-shadow: var(--lift-1);
+    position: relative;
+  }
+  .tript__card--now {
+    background: var(--ink);
+    border-color: var(--ink);
+    box-shadow: var(--lift-2);
+  }
+  .tript__k {
     font-family: var(--mono);
     font-size: 0.625rem;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    display: inline-block;
-    margin-bottom: 0.9rem;
-    padding: 0.2rem 0.45rem;
-    border: 1px solid currentColor;
-    border-radius: 2px;
+    color: var(--faint);
+    display: block;
+    margin-bottom: 1.6rem;
   }
-  .tag--verified { color: var(--allow); }
-  .tag--asserted { color: var(--dim); }
-  .split p { color: var(--ink-2); margin-bottom: 0.9rem; }
-  .split ul { margin: 0; padding-left: 1.1rem; color: var(--ink-2); }
-  .split li { margin-bottom: 0.4rem; }
+  .tript__card--now .tript__k { color: color-mix(in srgb, var(--paper) 55%, transparent); }
+  .tript__q {
+    font-family: var(--display);
+    font-variation-settings: 'wdth' 105;
+    font-weight: 600;
+    font-size: clamp(1.15rem, 2vw, 1.5rem);
+    letter-spacing: -0.025em;
+    color: var(--ink-2);
+    line-height: 1.15;
+  }
+  .tript__card--now .tript__q { color: var(--paper); font-weight: 700; }
 
-  /* ── Token anatomy ────────────────────────────────────────────────────────────────────────── */
-  .token {
-    border: 1px solid var(--rule);
-    background: var(--panel);
-    border-radius: 3px;
+  /* Verified / asserted */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 840px) { .duo { grid-template-columns: 1fr; } }
+  .panel {
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 1.75rem;
+    box-shadow: var(--lift-1);
+  }
+  .panel--accent { background: linear-gradient(to bottom, var(--allow-wash), var(--surface) 55%); border-color: color-mix(in srgb, var(--allow) 22%, var(--hairline)); }
+  .panel__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.26rem 0.55rem;
+    border-radius: 6px;
+    border: 1px solid currentColor;
+    margin-bottom: 1.1rem;
+  }
+  .panel--accent .panel__tag { color: var(--allow); }
+  .panel--plain .panel__tag { color: var(--dim); }
+  .panel h3 { font-size: 1.375rem; font-variation-settings: 'wdth' 104; margin-bottom: 0.7rem; }
+  .panel p { color: var(--ink-2); margin-bottom: 1.1rem; }
+  .panel ul { list-style: none; margin: 0; padding: 0; }
+  .panel li {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--hairline);
+    color: var(--ink-2);
+    font-size: 0.9375rem;
+  }
+  .panel li::before { content: '—'; color: var(--faint); flex: none; }
+
+  /* Token specimen */
+  .specimen {
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: var(--lift-2);
+  }
+  .specimen__row { border-bottom: 1px solid var(--hairline); }
+  .specimen__row:last-child { border-bottom: 0; }
+  .specimen__row header {
+    font-family: var(--mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 0.85rem 1.25rem 0;
+  }
+  .specimen__row pre {
+    margin: 0;
+    padding: 0.6rem 1.25rem 1.15rem;
     font-family: var(--mono);
     font-size: 0.8125rem;
-    overflow: hidden;
-  }
-  .token__part { padding: 1rem 1.15rem; border-bottom: 1px solid var(--rule); }
-  .token__part:last-child { border-bottom: 0; }
-  .token__part header {
-    font-size: 0.625rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--dim);
-    margin-bottom: 0.5rem;
-  }
-  .token__part pre {
-    margin: 0;
-    overflow-x: auto;
+    line-height: 1.75;
     color: var(--ink-2);
-    line-height: 1.65;
+    overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;
   }
-  .token__part.is-key { background: var(--stamp-bg); }
-  .token .hl { color: var(--allow); font-weight: 500; }
-  .token .note {
-    display: block;
-    margin-top: 0.6rem;
-    font-family: var(--body);
-    font-size: 0.875rem;
+  .specimen__row.is-key { background: linear-gradient(to right, var(--allow-wash), transparent 70%); }
+  .specimen .hl { color: var(--allow); font-weight: 600; }
+  .specimen__note {
+    padding: 0 1.25rem 1.25rem;
+    font-size: 0.9375rem;
     color: var(--ink-2);
+    max-width: 78ch;
   }
 
-  /* ── Numbered sequence (a real sequence, so it is numbered) ───────────────────────────────── */
-  .flow { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+  /* Flow */
+  .flow { border-top: 1px solid var(--hairline); }
   .flow__step {
     display: grid;
-    grid-template-columns: 3.5rem 1fr;
+    grid-template-columns: 4rem 1fr;
     gap: 1.25rem;
-    padding: 1.35rem 0;
-    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--hairline);
     align-items: baseline;
+    transition: background 0.2s;
   }
+  @media (max-width: 620px) { .flow__step { grid-template-columns: 2.5rem 1fr; gap: 0.9rem; } }
   .flow__n {
     font-family: var(--mono);
     font-size: 0.75rem;
-    color: var(--dim);
+    color: var(--faint);
     letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
   }
-  .flow__step h3 { font-size: 1.0625rem; margin-bottom: 0.3rem; font-variation-settings: 'wdth' 108; }
-  .flow__step p { color: var(--ink-2); font-size: 0.9375rem; max-width: var(--measure); }
+  .flow__step h3 { font-size: 1.1875rem; font-variation-settings: 'wdth' 102; margin-bottom: 0.35rem; }
+  .flow__step p { color: var(--ink-2); font-size: 0.9375rem; max-width: 70ch; }
 
-  /* ── Adapters ─────────────────────────────────────────────────────────────────────────────── */
-  .adapters { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-  @media (max-width: 820px) { .adapters { grid-template-columns: 1fr; } }
+  /* Adapters */
+  .adapters { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 880px) { .adapters { grid-template-columns: 1fr; } }
   .adapter {
-    border: 1px solid var(--rule);
-    background: var(--panel);
-    border-radius: 3px;
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--lift-1);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
-  .adapter header { padding: 1rem 1.15rem; border-bottom: 1px solid var(--rule); }
-  .adapter h3 { font-size: 1rem; font-variation-settings: 'wdth' 110; }
-  .adapter header p { font-size: 0.8125rem; color: var(--dim); margin-top: 0.25rem; }
+  .adapter > header { padding: 1.15rem 1.35rem; border-bottom: 1px solid var(--hairline); }
+  .adapter h3 { font-size: 1.0625rem; font-variation-settings: 'wdth' 102; }
+  .adapter > header p { font-size: 0.8125rem; color: var(--dim); margin-top: 0.2rem; }
   .adapter pre {
     margin: 0;
-    padding: 1.15rem;
+    padding: 1.35rem;
+    background: var(--sunken);
     font-family: var(--mono);
-    font-size: 0.75rem;
-    line-height: 1.75;
+    font-size: 0.78125rem;
+    line-height: 1.8;
     color: var(--ink-2);
     overflow-x: auto;
     flex: 1;
   }
-  .adapter pre .c { color: var(--dim); }
-  .adapter pre .k { color: var(--ink); }
+  .adapter pre .c { color: var(--faint); }
+  .adapter pre .k { color: var(--ink); font-weight: 600; }
+  .adapter pre .s { color: var(--allow); }
 
-  /* ── Negative space: what it is not ───────────────────────────────────────────────────────── */
-  .nots { border-top: 1px solid var(--rule); }
-  .not {
+  /* Limits */
+  .limits { border-top: 1px solid var(--hairline); }
+  .limit {
     display: grid;
-    grid-template-columns: minmax(0, 15rem) 1fr;
-    gap: 1.5rem;
-    padding: 1.25rem 0;
-    border-bottom: 1px solid var(--rule);
+    grid-template-columns: minmax(0, 16rem) 1fr;
+    gap: 1.75rem;
+    padding: 1.35rem 0;
+    border-bottom: 1px solid var(--hairline);
   }
-  @media (max-width: 720px) { .not { grid-template-columns: 1fr; gap: 0.35rem; } }
-  .not h3 { font-size: 1rem; font-variation-settings: 'wdth' 108; color: var(--ink); }
-  .not p { color: var(--dim); font-size: 0.9375rem; max-width: var(--measure); }
+  @media (max-width: 760px) { .limit { grid-template-columns: 1fr; gap: 0.3rem; } }
+  .limit h3 { font-size: 1.0625rem; font-variation-settings: 'wdth' 102; }
+  .limit p { color: var(--dim); font-size: 0.9375rem; max-width: 68ch; }
 
-  /* ── Close ────────────────────────────────────────────────────────────────────────────────── */
-  .close { border-top: 1px solid var(--rule); }
-  .close h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); max-width: 20ch; margin-bottom: 1rem; }
-  .close p { color: var(--ink-2); max-width: 52ch; margin-bottom: 1.75rem; }
-  .termbox {
+  /* Close */
+  .close__card {
+    border: 1px solid var(--hairline);
+    border-radius: 20px;
+    background: var(--surface);
+    box-shadow: var(--lift-3);
+    padding: clamp(2rem, 5vw, 3.75rem);
+    position: relative;
+    overflow: hidden;
+  }
+  .close__card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, var(--hairline) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--hairline) 1px, transparent 1px);
+    background-size: 52px 52px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 90% at 92% 8%, #000, transparent 68%);
+    mask-image: radial-gradient(ellipse 70% 90% at 92% 8%, #000, transparent 68%);
+    opacity: 0.9;
+    pointer-events: none;
+  }
+  .close__card > * { position: relative; }
+  .close__card h2 { font-size: clamp(1.9rem, 4.6vw, 3.2rem); font-variation-settings: 'wdth' 104; max-width: 19ch; margin-bottom: 1.1rem; }
+  .close__card p { color: var(--ink-2); max-width: 56ch; margin-bottom: 2rem; font-size: 1.0625rem; font-weight: 350; }
+  .term {
+    margin-top: 2.25rem;
     font-family: var(--mono);
     font-size: 0.8125rem;
-    background: var(--panel);
-    border: 1px solid var(--rule);
-    border-radius: 3px;
-    padding: 1.1rem 1.25rem;
+    background: var(--sunken);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    padding: 1.25rem 1.4rem;
     overflow-x: auto;
-    line-height: 1.9;
+    line-height: 1.95;
     color: var(--ink-2);
-    margin-top: 2rem;
+    box-shadow: inset 0 1px 3px rgba(16,18,22,.04);
   }
-  .termbox .p { color: var(--dim); user-select: none; }
+  .term .p { color: var(--faint); user-select: none; }
+  .term .ok { color: var(--allow); }
+  .term .wa { color: var(--review); }
 
-  footer.foot {
-    border-top: 1px solid var(--rule);
-    padding-block: 2rem 3rem;
-    color: var(--dim);
-    font-size: 0.8125rem;
-  }
-  .foot .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; }
+  footer.foot { border-top: 1px solid var(--hairline); padding-block: 2.25rem 3.5rem; }
+  .foot .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; color: var(--faint); font-size: 0.875rem; }
   .foot .spacer { margin-left: auto; }
-  .foot a { text-decoration: none; }
+  .foot a { text-decoration: none; color: var(--dim); }
   .foot a:hover { color: var(--ink); }
 </style>
 
-<header class="masthead">
+<header class="masthead" id="masthead">
   <div class="wrap">
-    <span class="wordmark">VERA</span>
-    <span class="eyebrow hide-sm">Decision firewall</span>
+    <a class="mark" href="#top">
+      <span class="mark__glyph" aria-hidden="true"></span>
+      <span class="mark__text">VERA</span>
+    </a>
+    <span class="pill hide-md"><span class="pill__dot"></span>391 tests passing</span>
     <nav>
-      <a href="#how" class="hide-sm">How</a>
-      <a href="#token" class="hide-sm">Token</a>
-      <a href="#limits" class="hide-sm">Limits</a>
-      <a class="btn" href="#pilot">Pilot</a>
+      <a class="lnk hide-sm" href="#trust">Trust model</a>
+      <a class="lnk hide-md" href="#token">Token</a>
+      <a class="lnk hide-md" href="#limits">Limits</a>
+      <a class="btn" href="#pilot">Start a pilot</a>
     </nav>
   </div>
 </header>
 
-<main>
+<main id="top">
   <div class="wrap">
     <section class="hero">
-      <p class="eyebrow" style="margin-bottom:1.25rem">For teams running agents with tool access</p>
-      <h1>Your agent is about to do something. <em>Should it?</em></h1>
+      <span class="pill hero__badge"><span class="pill__dot"></span>Decision firewall for AI agents</span>
+      <h1>Your agent is about to do something.<span class="quiet">Should it?</span></h1>
       <p class="lede">
         Authentication says who. Authorization says what they may do. Neither answers the question an
         agent with shell access raises a hundred times a day. VERA answers it — and signs the answer,
-        so the approval is bound to the exact command that runs.
+        bound to the exact command that runs.
       </p>
       <div class="hero-actions">
-        <a class="btn btn--solid" href="#pilot">Start a pilot</a>
-        <a class="btn" href="#how">See how it decides</a>
+        <a class="btn btn--ink btn--lg" href="#pilot">Start a pilot</a>
+        <a class="btn btn--lg" href="#trust">How it decides</a>
+        <span class="aside hide-sm">Runs in your infrastructure. Nothing leaves it.</span>
+      </div>
+
+      <div class="instrument" id="instrument" data-verdict="BLOCK">
+        <div class="instrument__chrome">
+          <span class="instrument__title">Decision · live example</span>
+          <div class="seg" role="tablist" aria-label="Example decisions">
+            <button role="tab" data-v="BLOCK" aria-selected="true" id="tab-BLOCK" aria-controls="ipanel">BLOCK</button>
+            <button role="tab" data-v="REVIEW" aria-selected="false" id="tab-REVIEW" aria-controls="ipanel">REVIEW</button>
+            <button role="tab" data-v="ALLOW" aria-selected="false" id="tab-ALLOW" aria-controls="ipanel">ALLOW</button>
+          </div>
+        </div>
+        <div class="instrument__body" id="ipanel" role="tabpanel" aria-labelledby="tab-BLOCK"></div>
       </div>
     </section>
 
-    <dl class="definition">
-      <div>
-        <dt>Authentication</dt>
-        <dd>Who is this?</dd>
-      </div>
-      <div>
-        <dt>Authorization</dt>
-        <dd>What may they do?</dd>
-      </div>
-      <div>
-        <dt>VERA</dt>
-        <dd class="now">Should this happen?</dd>
-      </div>
-    </dl>
-
-    <section id="how" style="padding-top:0">
-      <div class="section-head">
-        <h2>Three verdicts, and a receipt for each</h2>
-        <p>
-          Every request gets a verdict, the reason codes behind it, and — when the answer is yes — a
-          signed token bound to that exact action. These are real decisions from the system.
-        </p>
-      </div>
-
-      <div class="record" id="record" data-verdict="BLOCK">
-        <div class="record__tabs" role="tablist" aria-label="Example decisions">
-          <button role="tab" data-v="BLOCK" aria-selected="true" id="tab-BLOCK" aria-controls="panel">Block · deploy.production</button>
-          <button role="tab" data-v="REVIEW" aria-selected="false" id="tab-REVIEW" aria-controls="panel">Review · db.ddl</button>
-          <button role="tab" data-v="ALLOW" aria-selected="false" id="tab-ALLOW" aria-controls="panel">Allow · vcs.push</button>
+    <section id="define" style="padding-top:0">
+      <div class="tript">
+        <div class="tript__card">
+          <span class="tript__k">Authentication</span>
+          <p class="tript__q">Who is this?</p>
         </div>
-        <div class="record__body" id="panel" role="tabpanel" aria-labelledby="tab-BLOCK"></div>
+        <div class="tript__card">
+          <span class="tript__k">Authorization</span>
+          <p class="tript__q">What may they do?</p>
+        </div>
+        <div class="tript__card tript__card--now">
+          <span class="tript__k">VERA</span>
+          <p class="tript__q">Should this happen?</p>
+        </div>
       </div>
     </section>
 
     <section id="trust">
-      <div class="section-head">
+      <div class="shead">
+        <div class="shead__idx"><span class="eyebrow">01 — Trust model</span></div>
         <h2>Verified, or asserted. Never both.</h2>
         <p>
           This is the distinction the whole system rests on. An agent telling VERA that the tests
-          passed is not evidence that the tests passed.
+          passed is not evidence that the tests passed — and no amount of confidence in its tone
+          changes that.
         </p>
       </div>
-      <div class="split">
-        <div>
-          <span class="tag tag--verified">Verified</span>
+      <div class="duo">
+        <div class="panel panel--accent">
+          <span class="panel__tag">Verified</span>
           <h3>VERA went and looked</h3>
           <p>
-            A GitHub pull request's real approval state. Its real check runs. The migration files
-            actually in the diff. Facts fetched under a time budget, by us, from the source.
+            A pull request's real approval state. Its real check runs. The migration files actually in
+            the diff. Facts fetched under a time budget, by us, from the source.
           </p>
           <ul>
             <li>Can satisfy a prerequisite</li>
             <li>Carries <code>EVIDENCE.VERIFIED</code></li>
-            <li>Absent is stated, never assumed safe</li>
+            <li>Absence is stated, never assumed safe</li>
           </ul>
         </div>
-        <div>
-          <span class="tag tag--asserted">Asserted</span>
+        <div class="panel panel--plain">
+          <span class="panel__tag">Asserted</span>
           <h3>Something told us</h3>
           <p>
-            Anything the runtime sends: the agent's own claims, the user it says it is acting for,
-            the environment it says it is in. Useful context. Not proof of anything.
+            Anything the runtime sends: the agent's own claims, the user it says it is acting for, the
+            environment it says it is in. Useful context. Not proof of anything.
           </p>
           <ul>
             <li>Can <em>never</em> satisfy a prerequisite</li>
-            <li>Carries <code>EVIDENCE.ASSERTED</code> or <code>IDENTITY.ASSERTED</code></li>
+            <li>Carries <code>EVIDENCE.ASSERTED</code></li>
             <li>Can raise severity, never lower it</li>
           </ul>
         </div>
@@ -588,20 +838,21 @@
     </section>
 
     <section id="token">
-      <div class="section-head">
+      <div class="shead">
+        <div class="shead__idx"><span class="eyebrow">02 — The artefact</span></div>
         <h2>The product is the token</h2>
         <p>
-          An approval that is not bound to a specific action is a permission slip. VERA's token is an
-          Ed25519 signature over a hash of the exact command, target and environment — so changing a
-          single flag between asking and executing invalidates it.
+          An approval not bound to a specific action is a permission slip. VERA's token is an Ed25519
+          signature over a hash of the exact command, target and environment — so changing one flag
+          between asking and executing invalidates it.
         </p>
       </div>
-      <div class="token">
-        <div class="token__part">
-          <header>Header</header>
+      <div class="specimen">
+        <div class="specimen__row">
+          <header>Protected header</header>
           <pre>{"alg":"EdDSA","kid":"k_bce2163f-df6f-41d4-9581-8ed3fa930a85","typ":"vera-decision+jwt"}</pre>
         </div>
-        <div class="token__part is-key">
+        <div class="specimen__row is-key">
           <header>Payload — the binding</header>
 <pre>{
   "decision": "ALLOW",
@@ -610,73 +861,61 @@
   "approver": ["ops@logaxp.com"],
   "jti": "jti_9f2c…",  "exp": 1789217431
 }</pre>
-          <span class="note">
+          <p class="specimen__note">
             The hash is RFC 8785 canonical JSON over a fixed field set, computed byte-identically by
-            the service and the adapter. <code>jti</code> is single-use. <code>aud</code> names the one
-            receiver that may spend it.
-          </span>
+            the service and by the adapter. <code>jti</code> is single-use. <code>aud</code> names the
+            one receiver allowed to spend it.
+          </p>
         </div>
-        <div class="token__part">
+        <div class="specimen__row">
           <header>Signature</header>
-          <pre>Ed25519, verified offline against the tenant's published JWKS. In production the private half
-lives in AWS KMS and never reaches the service process.</pre>
+          <pre>Ed25519 — verified offline against the tenant's published JWKS. In production the private
+half lives in AWS KMS and never reaches the service process.</pre>
         </div>
       </div>
     </section>
 
     <section id="flow">
-      <div class="section-head">
-        <h2>What happens in those 40 milliseconds</h2>
-        <p>A real sequence, so it is numbered. Each step can refuse.</p>
+      <div class="shead">
+        <div class="shead__idx"><span class="eyebrow">03 — Sequence</span></div>
+        <h2>What happens in those forty milliseconds</h2>
+        <p>A real sequence, so it is numbered. Every step can refuse.</p>
       </div>
       <div class="flow">
-        <div class="flow__step">
-          <span class="flow__n">01</span>
-          <div>
-            <h3>The adapter asks, before the tool runs</h3>
-            <p>A command hook or an SDK guard hands VERA the tool, arguments, target and environment — and computes the action hash locally.</p>
-          </div>
-        </div>
-        <div class="flow__step">
-          <span class="flow__n">02</span>
-          <div>
-            <h3>Evidence is gathered, under a budget</h3>
-            <p>VERA fetches what it can verify itself. Anything that misses the budget is reported as <code>EVIDENCE.MISSING</code> — which does not satisfy a prerequisite.</p>
-          </div>
-        </div>
-        <div class="flow__step">
-          <span class="flow__n">03</span>
-          <div>
-            <h3>Policy evaluates, deterministically</h3>
-            <p>Cedar, not a language model. Most-restrictive-wins. A policy error becomes <code>SYSTEM.FAIL_CLOSED</code>, never a silent allow.</p>
-          </div>
-        </div>
-        <div class="flow__step">
-          <span class="flow__n">04</span>
-          <div>
-            <h3>Baselines add severity, never remove it</h3>
-            <p>Novelty, time-of-day, magnitude and burst signals can escalate a decision. They can never talk one down.</p>
-          </div>
-        </div>
-        <div class="flow__step">
-          <span class="flow__n">05</span>
-          <div>
-            <h3>A human decides, if it needs one</h3>
-            <p>Separation of duties excludes whoever requested the action. The reviewer sees the agent's text inside a quarantine region — it cannot impersonate VERA's own words.</p>
-          </div>
-        </div>
-        <div class="flow__step">
-          <span class="flow__n">06</span>
-          <div>
-            <h3>The token is signed, spent once, and audited</h3>
-            <p>The adapter re-computes the hash at execution. A mismatch is <code>TOKEN.HASH_MISMATCH</code> and counts as a bypass. Every signature has a matching audit event.</p>
-          </div>
-        </div>
+        <div class="flow__step"><span class="flow__n">01</span><div>
+          <h3>The adapter asks, before the tool runs</h3>
+          <p>A command hook or an SDK guard hands VERA the tool, arguments, target and environment — and computes the action hash locally, from the same shared code.</p>
+        </div></div>
+        <div class="flow__step"><span class="flow__n">02</span><div>
+          <h3>VERA reads the command itself</h3>
+          <p>Policy-visible arguments the command settles are derived here, not taken on trust. If the runtime described the action differently, that disagreement is a finding in its own right.</p>
+        </div></div>
+        <div class="flow__step"><span class="flow__n">03</span><div>
+          <h3>Evidence is gathered, under a budget</h3>
+          <p>Only what VERA can verify itself. Anything that misses the budget is <code>EVIDENCE.MISSING</code> — which does not satisfy a prerequisite.</p>
+        </div></div>
+        <div class="flow__step"><span class="flow__n">04</span><div>
+          <h3>Policy evaluates, deterministically</h3>
+          <p>Cedar, not a language model. Most-restrictive-wins. A policy error becomes <code>SYSTEM.FAIL_CLOSED</code>, never a silent allow.</p>
+        </div></div>
+        <div class="flow__step"><span class="flow__n">05</span><div>
+          <h3>Baselines add severity, never remove it</h3>
+          <p>Novelty, time-of-day, magnitude and burst signals can escalate a decision. They can never talk one down.</p>
+        </div></div>
+        <div class="flow__step"><span class="flow__n">06</span><div>
+          <h3>A human decides, if it needs one</h3>
+          <p>Separation of duties excludes whoever requested the action. The reviewer sees the agent's text inside a quarantine region, where it cannot impersonate VERA's own words.</p>
+        </div></div>
+        <div class="flow__step"><span class="flow__n">07</span><div>
+          <h3>The token is signed, spent once, audited</h3>
+          <p>The adapter recomputes the hash at execution. A mismatch is <code>TOKEN.HASH_MISMATCH</code> and counts as a bypass. Every signature has a matching audit event.</p>
+        </div></div>
       </div>
     </section>
 
     <section id="adapters">
-      <div class="section-head">
+      <div class="shead">
+        <div class="shead__idx"><span class="eyebrow">04 — Integration</span></div>
         <h2>Two lines in the runtime you already use</h2>
         <p>The security-critical path — decide, verify the token, then run — is one shared implementation, not one per adapter.</p>
       </div>
@@ -688,9 +927,9 @@ lives in AWS KMS and never reaches the service process.</pre>
           </header>
 <pre><span class="c"># writes settings and hooks for you</span>
 npx <span class="k">vera-hook init</span> \
-  --endpoint https://vera.internal \
-  --aud adapter:your-laptop \
-  --acting-for you@example.com
+  --endpoint <span class="s">https://vera.internal</span> \
+  --aud <span class="s">adapter:your-laptop</span> \
+  --acting-for <span class="s">you@example.com</span>
 
 <span class="c"># ALLOW  → runs, with a verified token
 # REVIEW → holds, then allow / deny / ask
@@ -702,70 +941,79 @@ npx <span class="k">vera-hook init</span> \
             <p>Wrap only the tools you care about</p>
           </header>
 <pre><span class="k">const</span> vera = createVeraGuard({
-  endpoint, apiKey, aud: <span class="c">'adapter:svc'</span>,
+  endpoint, apiKey, aud: <span class="s">'adapter:svc'</span>,
 });
 
 <span class="c">// enforces decide → verify → run</span>
 <span class="k">const</span> deploy = vera.protect(deployTool, {
-  class: <span class="c">'deploy.production'</span>,
+  class: <span class="s">'deploy.production'</span>,
 });</pre>
         </div>
       </div>
     </section>
 
     <section id="limits">
-      <div class="section-head">
+      <div class="shead">
+        <div class="shead__idx"><span class="eyebrow">05 — Honestly</span></div>
         <h2>What VERA is not</h2>
         <p>
           A pilot that starts with an accurate picture is the only kind worth running. This section is
           in the product documentation too, word for word.
         </p>
       </div>
-      <div class="nots">
-        <div class="not">
+      <div class="limits">
+        <div class="limit">
           <h3>Not a sandbox</h3>
           <p>It decides; it does not contain. An agent that ignores the adapter is not stopped by VERA.</p>
         </div>
-        <div class="not">
+        <div class="limit">
           <h3>Not a runtime guarantee</h3>
           <p>A hook can be disabled. VERA raises the cost of an unreviewed action and makes it visible. It does not make it impossible.</p>
         </div>
-        <div class="not">
+        <div class="limit">
           <h3>Not an LLM judge</h3>
           <p>No model decides anything consequential. Models draft policies and summarise for reviewers; they are never the authority.</p>
         </div>
-        <div class="not">
+        <div class="limit">
           <h3>Not a compliance certificate</h3>
           <p>It produces evidence a person can use. It does not make you compliant with anything.</p>
         </div>
-        <div class="not">
+        <div class="limit">
           <h3>Not finished</h3>
           <p>The threat model lists eight accepted risks. They are accepted, not solved — and they are written down for you to read before you decide.</p>
         </div>
       </div>
     </section>
 
-    <section id="pilot" class="close">
-      <h2>Thirty days, one repository, your infrastructure</h2>
-      <p>
-        Nothing leaves your network. We want the decisions VERA got wrong — the review that was
-        obviously fine, the thing it let through that you would have wanted to see. A pilot where VERA
-        blocked nothing and annoyed nobody is a failure, not a success.
-      </p>
-      <a class="btn btn--solid" href="https://github.com/KRISSBAJO/vera">Read the source and the threat model</a>
-<div class="termbox"><span class="p">$</span> docker compose -f infra/docker-compose.pilot.yml up -d --build
+    <section id="pilot">
+      <div class="close__card">
+        <h2>Thirty days, one repository, your infrastructure</h2>
+        <p>
+          Nothing leaves your network. We want the decisions VERA got wrong — the review that was
+          obviously fine, the thing it let through that you would have wanted to see. A pilot where
+          VERA blocked nothing and annoyed nobody is a failure, not a success.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn--ink btn--lg" href="https://github.com/KRISSBAJO/vera">Read the source and the threat model</a>
+          <a class="btn btn--lg" href="#limits">See the accepted risks first</a>
+        </div>
+<div class="term"><span class="p">$</span> docker compose -f infra/docker-compose.pilot.yml up -d --build
 <span class="p">$</span> vera-api bootstrap --org "Your Company" --email you@example.com
 <span class="p">$</span> vera-api doctor
 
-  <span style="color:var(--allow)">[ ok ]</span>  database role   "vera_app" — no superuser, no BYPASSRLS, so RLS applies
-  <span style="color:var(--allow)">[ ok ]</span>  schema          migrations applied through 0007
-  <span style="color:var(--review)">[warn]</span>  KMS             not configured; keys are sealed in this database</div>
+  <span class="ok">[ ok ]</span>  database role   "vera_app" — no superuser, no BYPASSRLS, so RLS applies
+  <span class="ok">[ ok ]</span>  schema          migrations applied through 0007
+  <span class="wa">[warn]</span>  KMS             not configured; keys are sealed in this database</div>
+      </div>
     </section>
   </div>
 
   <footer class="foot">
     <div class="wrap">
-      <span class="wordmark">VERA</span>
+      <a class="mark" href="#top">
+        <span class="mark__glyph" aria-hidden="true"></span>
+        <span class="mark__text">VERA</span>
+      </a>
       <span>Working name; not cleared for trademark.</span>
       <span class="spacer"></span>
       <a href="#limits">Accepted risks</a>
@@ -776,13 +1024,18 @@ npx <span class="k">vera-hook init</span> \
 </main>
 
 <script>
-  // Real decisions from the system, not illustrations.
+  // Real decisions from the running system, not illustrations.
   const RECORDS = {
     BLOCK: {
-      label: 'deploy.production',
-      command: 'kubectl apply -f k8s/prod/deployment.yaml',
-      flag: null,
-      sub: 'no token issued',
+      cls: 'deploy.production',
+      cmd: [['tok-cmd', 'kubectl'], ['tok-arg', ' apply -f k8s/prod/deployment.yaml']],
+      note: 'no token issued',
+      gates: [
+        ['Canonicalise', 'go', 'action_hash computed'],
+        ['Evidence', 'go', 'GitHub queried directly'],
+        ['Policy', 'stop', 'prerequisites unmet'],
+        ['Baseline', 'go', 'no history yet'],
+      ],
       codes: [
         ['PREREQ.MISSING_APPROVAL', 'high'],
         ['PREREQ.TESTS_NOT_PASSED', 'high'],
@@ -791,90 +1044,123 @@ npx <span class="k">vera-hook init</span> \
       ],
       why:
         'VERA asked GitHub itself. Pull request #1 is open, <strong>approved: false</strong>, ' +
-        '<strong>checks: none</strong>. The agent asserted the change was reviewed; that assertion ' +
+        '<strong>checks: none</strong>. The agent asserted the change was reviewed; an assertion ' +
         'cannot satisfy a prerequisite, and the verified answer disagrees with it.',
-      meta: ['target: repository logaxp/hearken', 'environment: production', 'policy_set: ps_1'],
+      meta: ['repository logaxp/hearken', 'environment production', 'policy_set ps_1'],
     },
     REVIEW: {
-      label: 'db.ddl',
-      command: 'psql -c "ALTER TABLE users DROP COLUMN legacy_id"',
-      flag: null,
-      sub: 'awaiting a human',
+      cls: 'vcs.push',
+      cmd: [['tok-cmd', 'git'], ['tok-arg', ' push '], ['tok-flag', '--force'], ['tok-arg', ' origin feature/x']],
+      note: 'awaiting a human',
+      gates: [
+        ['Canonicalise', 'go', 'force read from the command'],
+        ['Evidence', 'go', 'nothing required'],
+        ['Policy', 'hold', 'force push → review'],
+        ['Baseline', 'hold', 'unlike this actor'],
+      ],
       codes: [
         ['POLICY.REQUIRE_REVIEW', 'med'],
-        ['ACTION.SENSITIVE_RESOURCE', 'med'],
+        ['ACTION.ARGUMENT_MISMATCH', 'high'],
         ['IDENTITY.ASSERTED', 'med'],
         ['BASELINE.INSUFFICIENT_HISTORY', 'med'],
       ],
       why:
-        'Irreversible, against a high-sensitivity target, and nothing like it has run before. ' +
-        'Routed to a reviewer who is <strong>not</strong> the person the agent says it is acting for — ' +
-        'separation of duties is enforced, not suggested. Expiry is a refusal, not an approval.',
-      meta: ['target: database prod-postgres', 'routed_to: ops@logaxp.com', 'expires_in: 900s'],
+        'The adapter sent <code>force: false</code>. The command says <code>--force</code>. VERA ' +
+        'derives that flag itself rather than trusting the runtime, so the force-push rules applied ' +
+        'anyway — and the <strong>disagreement is itself a finding</strong>, because it is what ' +
+        'deliberate evasion looks like.',
+      meta: ['repository logaxp/hearken', 'routed_to ops@logaxp.com', 'expires_in 900s'],
     },
     ALLOW: {
-      label: 'vcs.push',
-      command: 'git push origin feature/decision-tokens',
-      flag: null,
-      sub: 'token issued · 131s',
+      cls: 'vcs.push',
+      cmd: [['tok-cmd', 'git'], ['tok-arg', ' push origin feature/decision-tokens']],
+      note: 'token issued · 131s',
+      gates: [
+        ['Canonicalise', 'go', 'action_hash computed'],
+        ['Evidence', 'go', 'nothing required'],
+        ['Policy', 'go', 'permitted, not forced'],
+        ['Baseline', 'go', 'within normal hours'],
+      ],
       codes: [
         ['IDENTITY.ASSERTED', 'med'],
         ['BASELINE.INSUFFICIENT_HISTORY', 'med'],
       ],
       why:
         'A feature branch, not the default one. Policy permits it, nothing escalates it, and a token ' +
-        'is issued bound to <strong>this</strong> command. Add <code>--force</code> and the class, the ' +
-        'policy and the hash all change.',
-      meta: [
-        'action_hash: sha256:a7b3160d95beb6de8c22422c095a347ede0096f121…',
-        'aud: adapter:your-laptop',
-        'jti: single-use',
-      ],
+        'is issued bound to <strong>this</strong> command. Add <code>--force</code> and the class, ' +
+        'the policy and the hash all change.',
+      meta: ['sha256:a7b3160d95beb6de8c22422c095a347e…', 'aud adapter:your-laptop', 'jti single-use'],
     },
   };
 
-  const panel = document.getElementById('panel');
-  const record = document.getElementById('record');
-  const tabs = Array.from(document.querySelectorAll('.record__tabs button'));
-
+  const instrument = document.getElementById('instrument');
+  const ipanel = document.getElementById('ipanel');
+  const tabs = Array.from(document.querySelectorAll('.seg button'));
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let timers = [];
 
-  function render(verdict) {
+  function render(verdict, animate) {
     const r = RECORDS[verdict];
-    record.setAttribute('data-verdict', verdict);
-    panel.setAttribute('aria-labelledby', 'tab-' + verdict);
-    panel.innerHTML = `
-      <div class="record__row">
-        <div class="record__cmd">
-          <span class="field-label">Action &mdash; class ${esc(r.label)}</span>
-          <div class="cmdline">${esc(r.command)}</div>
+    for (const t of timers) clearTimeout(t);
+    timers = [];
+    instrument.setAttribute('data-verdict', verdict);
+    ipanel.setAttribute('aria-labelledby', 'tab-' + verdict);
+
+    ipanel.innerHTML = `
+      <div class="io">
+        <div class="field">
+          <span class="field__label">Action &middot; class ${esc(r.cls)}</span>
+          <div class="cmd">${r.cmd.map(([c, t]) => `<span class="${c}">${esc(t)}</span>`).join('')}</div>
         </div>
-        <div class="stamp">
-          <span class="stamp__verdict">${verdict}</span>
-          <span class="stamp__sub">${esc(r.sub)}</span>
+        <div class="verdict">
+          <span class="verdict__word">${verdict}</span>
+          <span class="verdict__note">${esc(r.note)}</span>
         </div>
       </div>
-      <div class="codes">
-        ${r.codes.map(([c, s]) => `<span class="code-chip" data-sev="${s}">${esc(c)}</span>`).join('')}
+      <div class="gates">
+        ${r.gates
+          .map(
+            ([name, tone, value]) => `
+          <div class="gate" data-tone="${tone}">
+            <span class="gate__name"><span class="gate__led"></span>${esc(name)}</span>
+            <span class="gate__value">${esc(value)}</span>
+          </div>`,
+          )
+          .join('')}
       </div>
-      <p class="record__why">${r.why}</p>
-      <div class="record__meta">${r.meta.map((m) => `<span>${esc(m)}</span>`).join('')}</div>
+      <div class="codes">${r.codes.map(([c, s]) => `<span class="chip" data-sev="${s}">${esc(c)}</span>`).join('')}</div>
+      <p class="why">${r.why}</p>
+      <div class="meta">${r.meta.map((m) => `<span>${esc(m)}</span>`).join('')}</div>
     `;
+
+    // The gates resolve left to right, the way the decision actually proceeds. On first paint they
+    // are already resolved: the page at rest shows a finished decision, not an empty instrument.
+    const gates = Array.from(ipanel.querySelectorAll('.gate'));
+    if (!animate || reduced) {
+      for (const g of gates) g.classList.add('is-on');
+    } else {
+      gates.forEach((g, i) => timers.push(setTimeout(() => g.classList.add('is-on'), 90 + i * 130)));
+    }
     for (const t of tabs) t.setAttribute('aria-selected', String(t.dataset.v === verdict));
   }
 
   for (const t of tabs) {
-    t.addEventListener('click', () => render(t.dataset.v));
+    t.addEventListener('click', () => render(t.dataset.v, true));
     t.addEventListener('keydown', (e) => {
       const i = tabs.indexOf(t);
-      const next = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : -1;
-      if (next < 0 || next >= tabs.length) return;
+      const n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : -1;
+      if (n < 0 || n >= tabs.length) return;
       e.preventDefault();
-      tabs[next].focus();
-      render(tabs[next].dataset.v);
+      tabs[n].focus();
+      render(tabs[n].dataset.v, true);
     });
   }
 
-  // At rest the page already shows a decision — the most characteristic one.
-  render('BLOCK');
+  render('BLOCK', false);
+
+  const mast = document.getElementById('masthead');
+  const onScroll = () => mast.classList.toggle('is-stuck', window.scrollY > 8);
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
 </script>
