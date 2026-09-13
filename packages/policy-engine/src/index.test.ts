@@ -60,7 +60,8 @@ describe('Policy Pack 1 — brief Appendix C', () => {
   it('git push to a feature branch → ALLOW', () => {
     const r = run(set, { action: 'vcs.push', resource: featureBranch });
     expect(r.outcome).toBe('ALLOW');
-    expect(r.reasonCodes).toEqual([]);
+    // The permit is named at `info`, so a later "that ALLOW was wrong" can point at it.
+    expect(r.reasonCodes).toEqual([{ code: 'POLICY.PERMIT', severity: 'info', policy_id: 'vcs-push-non-force' }]);
   });
 
   it('git push --force to the default branch → BLOCK with POLICY.DENY naming the policy', () => {

@@ -35,6 +35,12 @@ export const REASON_CODES = {
     guidance:
       'This is a hard rule. Nothing a reviewer sees here changes it; the policy owner must change the policy.',
   },
+  'POLICY.PERMIT': {
+    category: 'POLICY',
+    defaultSeverity: 'info',
+    description: 'A permit policy matched. Names the policy that allowed the action.',
+    guidance: 'Informational. If this ALLOW turns out to be wrong, this is the policy to tighten.',
+  },
   'POLICY.REQUIRE_REVIEW': {
     category: 'POLICY',
     defaultSeverity: 'high',

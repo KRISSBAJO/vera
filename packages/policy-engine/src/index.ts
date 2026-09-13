@@ -237,6 +237,11 @@ export function evaluate(set: CompiledPolicySet, input: EvaluationInput): Policy
   const reviewIds = determining.filter((id) => set.policies[id]?.veraEffect === 'review');
   for (const id of reviewIds)
     reasonCodes.push({ code: 'POLICY.REQUIRE_REVIEW', severity: 'high', policy_id: id });
+  // Plain permits are named too, at `info` so they never move the verdict. Without this an ALLOW
+  // leaves no trace of *which* permit allowed it — and when a human later says that ALLOW was wrong,
+  // the permit is the one thing the wrong-verdicts report needs to point at.
+  for (const id of determining.filter((id) => !reviewIds.includes(id)))
+    reasonCodes.push({ code: 'POLICY.PERMIT', severity: 'info', policy_id: id });
   if (errors.length > 0)
     reasonCodes.push({
       code: 'SYSTEM.FAIL_CLOSED',

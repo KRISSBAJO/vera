@@ -51,6 +51,28 @@ Restart Claude Code in that project; hooks are loaded at session start. Approve 
 curl -X POST http://localhost:4000/v1/decisions/dec_…/approve -H "Authorization: Bearer vera_rs_…" -H "content-type: application/json" -d '{"rationale":"checked"}'
 ```
 
+## Say when it got one wrong (dogfood)
+
+VERA improves from the verdicts a human disagrees with, and only from those. Every decision made on
+this machine is journaled locally (`~/.vera/decisions.jsonl` — program name, class and verdict; never
+the arguments). Two commands close the loop:
+
+```bash
+vera-hook recent
+```
+
+```bash
+vera-hook wrong last --should REVIEW --why "this branch deploys to a preview environment"
+```
+
+`--should` is the verdict you wanted. Looser than that is recorded as a **false negative** (a policy
+gap — VERA let through something that wanted a human); stricter is a **false positive** (approval
+fatigue). Reviewers read the ranked result at `GET /v1/reports/wrong-verdicts` — false negatives
+first, regardless of count, with the reason codes and policy ids behind each one.
+
+The rule for the two-week dogfood: log every wrong verdict the moment you notice it. A verdict you
+merely tolerated is data VERA never gets.
+
 ## Run the whole thing (pilot)
 
 No toolchain needed beyond Docker — API, dashboard, Postgres and Redis, with migrations applied before the API starts:
