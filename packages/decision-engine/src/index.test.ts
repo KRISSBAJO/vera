@@ -204,11 +204,50 @@ describe('aggregation and defaults', () => {
   });
 
   it('one medium code alone does not', () => {
+    // A destructive hint on an otherwise unremarkable non-production write: exactly one medium code,
+    // which must not be enough on its own.
+    const r = run(
+      req({
+        target: { kind: 'workspace', id: 'laptop' },
+        action: {
+          class: 'file.write',
+          tool: 'Write',
+          arguments: { path: 'notes.md' },
+          environment: 'development',
+          hints: { destructive: true },
+        },
+      }),
+    );
+    expect(codesOf(r).filter((c) => c === 'ACTION.DESTRUCTIVE_HINT')).toHaveLength(1);
+    expect(r.decision).toBe('ALLOW');
+  });
+
+  it('a consequential action on a high-sensitivity resource reaches a human on its own', () => {
+    // Changed deliberately (hostile-client suite, 12 September 2026). The environment is asserted and
+    // unverifiable, so an attacker can claim "development" for a production resource and skip every
+    // environment-gated rule. The tenant's own sensitivity marking is the sturdier fact, so it is
+    // high severity for consequential work rather than medium — enough alone to require review.
     const r = run(
       req({
         target: { kind: 'vault', id: 'prod-secrets', sensitivity: 'high' },
-        action: { class: 'secret.read', tool: 'vault', arguments: {} },
+        action: { class: 'secret.read', tool: 'vault', arguments: {}, environment: 'development' },
       }),
+    );
+    expect(r.decision).toBe('REVIEW');
+    expect(r.reasonCodes).toContainEqual(
+      expect.objectContaining({ code: 'ACTION.SENSITIVE_RESOURCE', severity: 'high' }),
+    );
+  });
+
+  it('but reading is not escalated by sensitivity alone — read-only classes stay medium', () => {
+    const r = run(
+      req({
+        target: { kind: 'database', id: 'prod-postgres', sensitivity: 'high' },
+        action: { class: 'db.read', tool: 'psql', arguments: { command: 'select 1' } },
+      }),
+    );
+    expect(r.reasonCodes).toContainEqual(
+      expect.objectContaining({ code: 'ACTION.SENSITIVE_RESOURCE', severity: 'medium' }),
     );
     expect(r.decision).toBe('ALLOW');
   });

@@ -9,7 +9,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `docs/brief-v2.md` | Product and build spec (September 2026). Start here. |
 | `docs/design-partner-pilot.md` | What a pilot involves: scope, what is stored, what happens when it breaks, what is not production-ready, and how we both judge whether it worked. |
 | `docs/competitive-scan-2026-09.md` | Landscape scan behind the brief's §2 — ~75 sources. |
-| `docs/threat-model.md` | Build deliverable 1: trust boundaries, threats T01–T25, security requirements SR-01–SR-23, accepted risks, open questions. |
+| `docs/threat-model.md` | Build deliverable 1: trust boundaries, threats T01–T25, security requirements SR-01–SR-24, accepted risks, open questions. |
 | `docs/boundary-and-assumptions.md` | Build deliverable 1: the product boundary restated, and 17 unsafe or ambiguous assumptions found in the brief with resolutions. |
 | `docs/decisions/` | Architecture decision records: 0001 tech stack, 0002 Claude Code adapter shape, 0003 per-user keys, 0004 Cedar closed records, 0005 key custody, 0006 Slack notifications not approvals. |
 | `docs/word/` | Word exports of the above, generated from the markdown — never edited by hand. |
@@ -26,7 +26,7 @@ A signed decision service for consequential AI-agent actions. Working name; not 
 | `packages/decision-engine` | Request + policy set + evidence → verdict, reason codes, risk score, review routing with SoD, expiry. |
 | `packages/baseline-engine` | Per-organisation behavioural baselines: novelty, time-of-day, magnitude, bursts. Deterministic, explainable, add-severity-only. |
 | `packages/evidence` | Evidence providers (Proof): facts VERA fetches itself, under a budget. GitHub PR approval, checks, migrations. |
-| `apps/api` | Fastify: `/v1/decide`, `/v1/decisions/:id` (+ approve / reject / outcome), `/v1/tokens/consume`, `/v1/audit-events`, tenant JWKS, `/openapi.json`. CLI: `migrate`, `bootstrap`, `add-user`, `serve`. |
+| `apps/api` | Fastify (incl. `hostile.test.ts`, a suite that speaks the protocol directly and lies): `/v1/decide`, `/v1/decisions/:id` (+ approve / reject / outcome), `/v1/tokens/consume`, `/v1/audit-events`, tenant JWKS, `/openapi.json`. CLI: `migrate`, `bootstrap`, `add-user`, `serve`. |
 | `packages/adapters/core` | Shared adapter runtime: HTTP client, offline token verification, and the REVIEW hold loop. One implementation of the security-critical path. Apache-2.0. |
 | `packages/adapters/claude-code` | `vera-hook`: the Claude Code command hook (ADR-0002). `pre` asks VERA and verifies tokens; `post` recomputes the hash and reports outcomes; `init` writes config and hooks; `status`. Apache-2.0. |
 | `apps/site` | Landing page: a single static file, no build step, plus a dependency-free static server for local viewing. |

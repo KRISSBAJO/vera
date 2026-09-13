@@ -98,6 +98,10 @@ Format: **ID — title.** Attack → impact → mitigations (V1 required unless 
   - Disagreement emits `ACTION.ARGUMENT_MISMATCH` (high) and sets `context.argument_mismatch`, which Policy Pack 1 v3 routes to REVIEW for every class. REVIEW rather than BLOCK deliberately: the decision is already made on VERA's reading either way, and forbidding outright would take a fleet offline on an adapter version skew — which is how a security control gets switched off.
   - The adapters import the same function, so an honest adapter cannot trip the alarm by accident and a dishonest one is the only thing that can.
   - The action hash is untouched: it is still over the exact bytes the tool receives. Only what policy is shown changes.
+- **Class evasion at the wire (found 12 September 2026 by the hostile-client suite, fixed).** The class-raising heuristic above lived only in the adapter. A caller speaking the protocol directly — an API key is all it takes — could declare `rm -rf /var/lib/postgresql/data` as `file.read`, which Policy Pack 1 permits outright, and receive an ALLOW with no ACTION code at all. Same shape as the argument-level hole, one level up.
+  - `commandEffect()` in `@vera/canon` is the **service's own** reading of what a command does. When a read-only class is claimed for a command that plainly does something, `ACTION.CLASS_MISMATCH` (high) is emitted and `context.class_mismatch` routes to REVIEW in Policy Pack 1 v4.
+  - It is one-directional by construction: it can say "this looks consequential" and never "this looks safe". No match means *nothing was recognised*, not that the command was cleared — a test asserts the type has no safe verdict to return.
+  - **Environment is asserted and unverifiable**, so claiming `development` for a production database skipped every environment-gated rule. The tenant's own `sensitivity` marking is the sturdier fact, so `ACTION.SENSITIVE_RESOURCE` is now high severity for consequential classes — enough on its own to reach a human — and stays medium for reads.
 - Multi-step laundering is an **accepted V1 limitation** (§5). Session-level baselines *(later)* flag write-then-execute patterns.
 - Test: corpus of 50 evasive commands; none reaches ALLOW under Policy Pack 1 in `production`.
 
@@ -238,6 +242,7 @@ These become acceptance tests; the ID appears in the test name.
 | SR-02 | `action_hash` is JCS over a fixed field set with byte-exact values; adapters recompute at execution | T02 | property tests + post-exec mismatch event |
 | SR-03 | Unknown tools and unclassified shell in production cannot ALLOW | T03 | evasion corpus |
 | SR-23 | Policy-visible arguments the command settles are derived by the service, not taken from the adapter; disagreement cannot ALLOW | T03 | denied-`--force` test at the HTTP boundary |
+| SR-24 | A read-only class claimed for a command that plainly acts cannot ALLOW; the service reads the command itself | T03 | hostile-client suite (`apps/api/src/hostile.test.ts`) |
 | SR-04 | Untrusted fields render as plain text in a labeled region | T04, T23 | markup-in-argument test |
 | SR-05 | LLM outputs can add codes but never remove or downgrade | T05 | steering-text test |
 | SR-06 | Time features use server time + tenant timezone | T11 | spoofed `local_time` test |

@@ -3,7 +3,7 @@
 **Working concept:** a signed decision service for consequential AI-agent actions.
 **Date:** 11 September 2026 (v2.1 — assumption fixes from `boundary-and-assumptions.md` applied)
 **Status:** build spec. Supersedes the v1 Codex brief. Written for Claude Code to build from, with a validation gate before serious code.
-**Companion files:** `competitive-scan-2026-09.md` (75-source landscape scan; every claim in §2 traces to it) · `threat-model.md` (T01–T25, SR-01–SR-23) · `boundary-and-assumptions.md` (A1–A17) · `decisions/` (architecture decision records).
+**Companion files:** `competitive-scan-2026-09.md` (75-source landscape scan; every claim in §2 traces to it) · `threat-model.md` (T01–T25, SR-01–SR-24) · `boundary-and-assumptions.md` (A1–A17) · `decisions/` (architecture decision records).
 
 ---
 

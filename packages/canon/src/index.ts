@@ -108,6 +108,54 @@ export function analyzeShell(command: string): ShellAnalysis {
   return { indirect: constructs.length > 0, constructs };
 }
 
+// ---------- command effect (threat T03: class evasion) ----------
+
+/**
+ * Does this command plainly do something, whatever the caller called it?
+ *
+ * The action class is asserted by the runtime. Policy Pack 1 permits the read-only classes outright,
+ * so a caller that labels `rm -rf /var/lib/postgresql/data` as `file.read` is permitted outright too —
+ * the class is a free pass if nobody checks it against the command. That is T03, and it is the same
+ * shape as the force-flag hole: a consequential decision resting on an asserted fact.
+ *
+ * This is the server's own reading. It is deliberately coarse and deliberately one-directional: it
+ * can only say "this looks consequential", never "this looks safe". A false positive costs one
+ * review; a false negative is a bypass. It never downgrades anything.
+ */
+export interface CommandEffect {
+  consequential: boolean;
+  /** What was matched, for the reviewer's reason-code detail. */
+  signals: string[];
+}
+
+const CONSEQUENTIAL_PATTERNS: ReadonlyArray<[string, RegExp]> = [
+  ['recursive or forced delete', /\brm\s+(-[a-zA-Z]*[rf][a-zA-Z]*\s+)+/],
+  ['filesystem write or truncate', /(^|[\s;&|])(dd|mkfs|shred|truncate)\b/],
+  // `TRUNCATE users` is valid Postgres — the TABLE keyword is optional, so requiring it missed the
+  // shorter and more likely spelling. DROP genuinely needs an object type, so that one stays strict.
+  [
+    'destructive SQL',
+    /\bdrop\s+(table|database|schema|index|view|role|user|sequence)\b|\btruncate\s+(table\s+)?["'\w]|\bdelete\s+from\b/i,
+  ],
+  ['schema change', /\balter\s+(table|database|schema)\b/i],
+  ['version-control write', /\bgit\s+(push|reset\s+--hard|clean|rebase|filter-branch)\b/],
+  [
+    'deployment',
+    /\b(kubectl|helm|terraform|pulumi|aws|gcloud|az)\s+\w*(apply|delete|destroy|deploy|rollout|create|put)\b/,
+  ],
+  ['package publish', /\b(npm|pnpm|yarn|cargo|gem|twine)\s+publish\b|\bdocker\s+push\b/],
+  ['permission change', /(^|[\s;&|])(chmod|chown|chgrp|setfacl)\s/],
+  ['service control', /(^|[\s;&|])(systemctl|service)\s+\w*(start|stop|restart|disable)\b/],
+  ['piped remote execution', /\b(curl|wget)\b[^|]*\|\s*(sh|bash|zsh|python\d?|node|perl)\b/],
+  ['output redirection to a file', /[^>]>>?\s*\/?[\w./-]+/],
+  ['process termination', /(^|[\s;&|])(kill|pkill|killall)\s/],
+];
+
+export function commandEffect(command: string): CommandEffect {
+  const signals = CONSEQUENTIAL_PATTERNS.filter(([, re]) => re.test(command)).map(([name]) => name);
+  return { consequential: signals.length > 0, signals };
+}
+
 // ---------- derived policy arguments (threat T03: argument-level class evasion) ----------
 
 /**

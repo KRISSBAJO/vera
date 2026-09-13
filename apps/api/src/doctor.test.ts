@@ -63,7 +63,11 @@ describe('schema and tenants', () => {
     expect((await checkSchema(app)).level).toBe('ok');
   });
 
-  it('reports a freshly bootstrapped tenant as ready, and counts its KMS keys as zero', async () => {
+  // checkTenants surveys every tenant, and this database accumulates them across runs. The work is
+  // bounded concurrency against a real Postgres, so give it more than vitest's default.
+  it('reports a freshly bootstrapped tenant as ready, and counts its KMS keys as zero', {
+    timeout: 30_000,
+  }, async () => {
     const boot = await bootstrapTenant(app, randomBytes(32), {
       orgName: `DoctorCo-${randomBytes(3).toString('hex')}`,
       adminEmail: 'kriss@logaxp.com',
@@ -75,7 +79,9 @@ describe('schema and tenants', () => {
     expect(mine.some((c) => c.level === 'ok' && c.detail.includes('development-grade'))).toBe(true);
   });
 
-  it('warns when a tenant has too few reviewers for separation of duties to be satisfiable', async () => {
+  it('warns when a tenant has too few reviewers for separation of duties to be satisfiable', {
+    timeout: 30_000,
+  }, async () => {
     const boot = await bootstrapTenant(app, randomBytes(32), {
       orgName: `SoloCo-${randomBytes(3).toString('hex')}`,
       adminEmail: 'solo@logaxp.com',

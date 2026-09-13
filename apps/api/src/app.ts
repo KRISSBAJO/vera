@@ -78,6 +78,31 @@ const ErrorSchema = z.object({
 });
 
 /**
+ * The single code to show in the queue's "why it stopped" column.
+ *
+ * A reviewer scanning the list wants the *cause*, not the context: `POLICY.REQUIRE_REVIEW` names a
+ * rule they can go and read, `ACTION.SENSITIVE_RESOURCE` only says the target matters. Both can be
+ * high severity, so severity alone cannot choose between them, and picking the first high code in the
+ * array silently depends on the order the decision engine happens to push them — which changed under
+ * us once already.
+ */
+const CAUSE_RANK: readonly string[] = ['POLICY.', 'PREREQ.', 'TOKEN.', 'ACTION.', 'BASELINE.'];
+
+export function topReason(
+  codes: readonly { code: string; severity: string }[],
+): { code: string; severity: string } | undefined {
+  const rank = (c: { code: string; severity: string }) => {
+    const family = CAUSE_RANK.findIndex((p) => c.code.startsWith(p));
+    const sev = c.severity === 'high' ? 0 : c.severity === 'medium' ? 1 : 2;
+    return sev * 100 + (family === -1 ? CAUSE_RANK.length : family);
+  };
+  const ranked = [...codes]
+    .filter((c) => c.severity === 'high' || c.severity === 'medium')
+    .sort((a, b) => rank(a) - rank(b));
+  return ranked[0];
+}
+
+/**
  * A one-line rendering of (already redacted) tool arguments for a notification.
  *
  * `command` first because that is the whole action for shell tools and the only thing a reviewer
@@ -932,8 +957,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             const action = request.action as { class: string; tool: string; environment?: string };
             const target = request.target as { id?: string } | null;
             const codes = decision.reasonCodes as { code: string; severity: string }[];
-            const top =
-              codes.find((c) => c.severity === 'high') ?? codes.find((c) => c.severity === 'medium');
+            const top = topReason(codes);
             return {
               decision_id: decision.id,
               created_at: decision.createdAt.toISOString(),

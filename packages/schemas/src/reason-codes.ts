@@ -216,6 +216,14 @@ export const REASON_CODES = {
     description: 'The shell command could not be classified into a more specific action class.',
     guidance: 'Read the command. The classifier could not.',
   },
+  'ACTION.CLASS_MISMATCH': {
+    category: 'ACTION',
+    defaultSeverity: 'high',
+    description:
+      'The action was declared as a read-only class, but the command plainly does something. VERA judged it on what the command does.',
+    guidance:
+      'The runtime called this harmless and it is not. Either the classifier is wrong or the caller is lying; both are worth knowing before this runs.',
+  },
   'ACTION.ARGUMENT_MISMATCH': {
     category: 'ACTION',
     defaultSeverity: 'high',

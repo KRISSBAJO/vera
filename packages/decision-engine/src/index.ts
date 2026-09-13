@@ -1,4 +1,4 @@
-import { analyzeShell, deriveShellArgs } from '@vera/canon';
+import { analyzeShell, commandEffect, deriveShellArgs } from '@vera/canon';
 import { type CompiledPolicySet, evaluate } from '@vera/policy-engine';
 import {
   type DecideRequest,
@@ -125,6 +125,22 @@ export function decide(input: DecideInput): DecideOutput {
       detail: disagreements.join('; '),
     });
   }
+  // --- class evasion: a read-only label on a command that plainly does something (T03) ---
+  //
+  // Policy Pack 1 permits the read-only classes outright, so the class is a free pass unless someone
+  // checks it against the command. The runtime asserts the class; this is the server's own reading of
+  // what the command does, and it can only ever raise concern — a command it does not recognise is
+  // left exactly as the caller described it.
+  const effect = command && !isConsequential(action.class) ? commandEffect(command) : null;
+  const classMismatch = effect?.consequential ?? false;
+  if (effect && classMismatch) {
+    codes.push({
+      code: 'ACTION.CLASS_MISMATCH',
+      severity: 'high',
+      detail: `declared ${action.class}, but the command performs: ${effect.signals.join(', ')}`,
+    });
+  }
+
   const isProd = action.environment === 'production';
   if (shell.indirect)
     codes.push({
@@ -136,7 +152,16 @@ export function decide(input: DecideInput): DecideOutput {
     codes.push({ code: 'ACTION.UNCLASSIFIED_SHELL', severity: isProd ? 'medium' : 'low' });
   if (action.hints?.destructive) codes.push({ code: 'ACTION.DESTRUCTIVE_HINT', severity: 'medium' });
   if (request.target?.sensitivity === 'high')
-    codes.push({ code: 'ACTION.SENSITIVE_RESOURCE', severity: 'medium' });
+    codes.push({
+      code: 'ACTION.SENSITIVE_RESOURCE',
+      // High for consequential work, because the two facts here are not equally trustworthy. The
+      // environment is asserted by the runtime and cannot be checked, so a caller can claim
+      // "development" for a production database and skip every environment-gated rule. The
+      // sensitivity is the tenant's own classification of the resource, set out of band. Letting the
+      // weaker claim quietly outrank the stronger one is the evasion; this makes the stronger one
+      // enough on its own to reach a human.
+      severity: isConsequential(action.class) ? 'high' : 'medium',
+    });
 
   // --- prerequisites: derived from VERIFIED evidence only (SR-01). Absence is stated, never assumed safe. ---
   const flags = projectEvidence(verified);
@@ -200,6 +225,7 @@ export function decide(input: DecideInput): DecideOutput {
       hints: action.hints ?? {},
       indirect_input: shell.indirect,
       argument_mismatch: disagreements.length > 0,
+      class_mismatch: classMismatch,
     },
   });
   codes.push(...policy.reasonCodes);

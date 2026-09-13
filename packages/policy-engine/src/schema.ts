@@ -90,6 +90,8 @@ const contextType = record({
    * derived it — nothing in here came from the runtime.
    */
   argument_mismatch: { type: 'Boolean' },
+  /** A read-only class was claimed for a command that plainly does something (T03). */
+  class_mismatch: { type: 'Boolean' },
 });
 
 const resourceShape = record({

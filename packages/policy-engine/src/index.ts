@@ -132,6 +132,8 @@ export interface EvaluationInput {
     indirect_input: boolean;
     /** VERA's own reading of the command disagreed with an argument the adapter sent. */
     argument_mismatch?: boolean;
+    /** A read-only class was claimed for a command that plainly does something. */
+    class_mismatch?: boolean;
   };
 }
 
@@ -202,6 +204,7 @@ export function evaluate(set: CompiledPolicySet, input: EvaluationInput): Policy
       hints: projectContext('hints', input.context.hints),
       indirect_input: input.context.indirect_input,
       argument_mismatch: input.context.argument_mismatch ?? false,
+      class_mismatch: input.context.class_mismatch ?? false,
     },
     schema: veraSchema,
     validateRequest: true,

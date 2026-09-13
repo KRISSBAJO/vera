@@ -13,13 +13,18 @@
  * message.send, and a production REVIEW for both. Without them a coding agent on a laptop could not
  * click a browser button or publish an artifact — every such call fell to POLICY.DEFAULT_DENY.
  *
- * v3 (2026-09-12): added \`argument-mismatch-requires-review\`, after finding that the force-push
- * rules below turned on \`context.args.force\` — a boolean the adapter derived and asserted. The
+ * v3 (2026-09-12): added `argument-mismatch-requires-review`, after finding that the force-push
+ * rules below turned on `context.args.force` — a boolean the adapter derived and asserted. The
  * service now derives it too and its own reading wins, so those rules are sound again; this policy
  * covers the remaining question of an adapter that described the action differently from how the
  * action reads.
+ *
+ * v4 (2026-09-12, hostile-client suite): added `class-mismatch-requires-review`. A client speaking
+ * the protocol directly could label `rm -rf /var/lib/postgresql/data` as `file.read` and be permitted
+ * outright, because the read-only permits below never look at the command. Found by tests that lie,
+ * not by tests that use the adapter.
  */
-export const POLICY_PACK_1_VERSION = 3;
+export const POLICY_PACK_1_VERSION = 4;
 
 export const POLICY_PACK_1 = `
 // ---- integrity of the request itself ----
@@ -34,6 +39,15 @@ export const POLICY_PACK_1 = `
 @vera_effect("review")
 permit(principal, action, resource)
 when { context.argument_mismatch == true };
+
+// A read-only class was claimed for a command that plainly does something. Read-only classes are
+// permitted outright below, so without this the class is simply a free pass: label 'rm -rf' as
+// 'file.read' and nothing else in the pack ever looks at it.
+@id("class-mismatch-requires-review")
+@vera_effect("review")
+permit(principal, action, resource)
+when { context.class_mismatch == true };
+
 
 // ---- version control ----
 
