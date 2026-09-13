@@ -252,3 +252,134 @@ export async function baselineExplain(
     magnitude_p95: r.magnitude_p95,
   }));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Wrong verdicts — the dogfood loop.
+//
+// A human said VERA got one wrong: `false_positive` (stricter than it should have been) or
+// `false_negative` (looser — it let through something that wanted a human). Both are asserted, both
+// are opinions, and both are the only data that says which policy or reason code to look at next.
+// The report does not rank by count alone: one false negative on a BLOCK-worthy action outweighs a
+// dozen tiresome REVIEWs, so the two directions are kept apart and never summed.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+export type Verdict = 'ALLOW' | 'REVIEW' | 'BLOCK';
+
+export interface WrongVerdict {
+  decision_id: string;
+  decided: Verdict;
+  should_have_been: Verdict;
+  /** `false_negative` is the one that matters. */
+  direction: 'false_positive' | 'false_negative';
+  note: string | null;
+  reason_codes: string[];
+  policy_ids: string[];
+  reported_by: string;
+  reported_at: string;
+}
+
+export interface WrongVerdictReport {
+  window_days: number;
+  generated_at: string;
+  total: number;
+  false_positives: number;
+  false_negatives: number;
+  /** "REVIEW→ALLOW": 7 — which way VERA leaned when it was wrong. */
+  by_transition: Record<string, number>;
+  /** Reason codes that most often sat on a wrong verdict, per direction. */
+  codes: { code: string; false_positives: number; false_negatives: number }[];
+  /** Policies that most often decided a wrong verdict, per direction. */
+  policies: { policy_id: string; false_positives: number; false_negatives: number }[];
+  items: WrongVerdict[];
+  note: string;
+}
+
+const VERDICTS: Verdict[] = ['ALLOW', 'REVIEW', 'BLOCK'];
+const isVerdict = (v: unknown): v is Verdict => VERDICTS.includes(v as Verdict);
+
+export async function wrongVerdicts(tx: Tx, orgId: string, windowDays: number): Promise<WrongVerdictReport> {
+  const since = new Date(Date.now() - windowDays * 24 * 3600 * 1000);
+
+  const rows = await tx
+    .select({
+      decisionId: outcomes.decisionId,
+      kind: outcomes.kind,
+      data: outcomes.data,
+      source: outcomes.source,
+      reportedAt: outcomes.createdAt,
+      decided: decisions.decision,
+      reasonCodes: decisions.reasonCodes,
+    })
+    .from(outcomes)
+    .innerJoin(decisions, eq(decisions.id, outcomes.decisionId))
+    .where(
+      and(
+        eq(outcomes.orgId, orgId),
+        gte(outcomes.createdAt, since),
+        sql`${outcomes.kind} in ('false_positive', 'false_negative')`,
+      ),
+    );
+
+  const items: WrongVerdict[] = [];
+  const byTransition: Record<string, number> = {};
+  const codeAcc = new Map<string, { false_positives: number; false_negatives: number }>();
+  const policyAcc = new Map<string, { false_positives: number; false_negatives: number }>();
+  const bump = (
+    m: Map<string, { false_positives: number; false_negatives: number }>,
+    k: string,
+    direction: 'false_positive' | 'false_negative',
+  ) => {
+    const a = m.get(k) ?? { false_positives: 0, false_negatives: 0 };
+    a[direction === 'false_positive' ? 'false_positives' : 'false_negatives'] += 1;
+    m.set(k, a);
+  };
+
+  for (const r of rows) {
+    const direction = r.kind as 'false_positive' | 'false_negative';
+    const data = (r.data ?? {}) as { should_have_been?: unknown; note?: unknown };
+    const should = isVerdict(data.should_have_been) ? data.should_have_been : null;
+    if (!should || !isVerdict(r.decided)) continue; // recorded without a target verdict; nothing to learn
+    const codes = (r.reasonCodes as { code: string; policy_id?: string }[]) ?? [];
+    const codeNames = [...new Set(codes.map((c) => c.code))];
+    const policyIds = [...new Set(codes.map((c) => c.policy_id).filter((p): p is string => !!p))];
+
+    items.push({
+      decision_id: r.decisionId,
+      decided: r.decided,
+      should_have_been: should,
+      direction,
+      note: typeof data.note === 'string' && data.note.trim() ? data.note.trim() : null,
+      reason_codes: codeNames,
+      policy_ids: policyIds,
+      reported_by: r.source,
+      reported_at: r.reportedAt.toISOString(),
+    });
+    const t = `${r.decided}→${should}`;
+    byTransition[t] = (byTransition[t] ?? 0) + 1;
+    for (const c of codeNames) bump(codeAcc, c, direction);
+    for (const p of policyIds) bump(policyAcc, p, direction);
+  }
+
+  const rank = (m: Map<string, { false_positives: number; false_negatives: number }>) =>
+    [...m.entries()]
+      // False negatives first, then false positives, then name — the dangerous direction sorts up.
+      .sort(
+        ([ka, a], [kb, b]) =>
+          b.false_negatives - a.false_negatives || b.false_positives - a.false_positives || ka.localeCompare(kb),
+      );
+
+  const false_negatives = items.filter((i) => i.direction === 'false_negative').length;
+  return {
+    window_days: windowDays,
+    generated_at: new Date().toISOString(),
+    total: items.length,
+    false_positives: items.length - false_negatives,
+    false_negatives,
+    by_transition: byTransition,
+    codes: rank(codeAcc).map(([code, c]) => ({ code, ...c })),
+    policies: rank(policyAcc).map(([policy_id, c]) => ({ policy_id, ...c })),
+    items: items.sort((a, b) => b.reported_at.localeCompare(a.reported_at)),
+    note:
+      'Every entry is one person’s opinion, recorded from an adapter (asserted). A false negative is VERA letting through something a human wanted to see; treat even one as a policy gap. False positives are approval fatigue; act on them once a pattern shows.',
+  };
+}

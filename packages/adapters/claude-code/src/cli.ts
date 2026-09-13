@@ -12,6 +12,8 @@ import {
   type HookDeps,
   type HookState,
   hooksSettings,
+  type JournalEntry,
+  journalPath,
   loadConfig,
   mergeHooksInto,
   PostToolUseInputSchema,
@@ -33,7 +35,35 @@ const usage = `vera-hook <command>
        [--acting-for <email>] [--environment development] [--settings <path/to/settings.json>]
                       writes ~/.vera/config.json (0600); with --settings, merges the hooks block into that file
   status              shows config location, endpoint, and queued degraded-mode events
+  recent [--n 10]     the last decisions VERA made for this machine, newest first
+  wrong <id|last> --should ALLOW|REVIEW|BLOCK [--why "…"]
+                      tell VERA a verdict was wrong. This is the dogfood loop: every entry ends up in
+                      GET /v1/reports/wrong-verdicts, grouped by the policy and reason codes behind it
 `;
+
+const JOURNAL_MAX = 500;
+
+function readJournal(): JournalEntry[] {
+  if (!existsSync(journalPath())) return [];
+  return readFileSync(journalPath(), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as JournalEntry);
+}
+
+async function appendJournal(entry: JournalEntry): Promise<void> {
+  mkdirSync(veraHome(), { recursive: true });
+  appendFileSync(journalPath(), `${JSON.stringify(entry)}\n`);
+  // Keep the file bounded without a second process: rewrite only when it has grown well past the cap.
+  const lines = readFileSync(journalPath(), 'utf8').split('\n').filter(Boolean);
+  if (lines.length > JOURNAL_MAX * 1.5) writeFileSync(journalPath(), `${lines.slice(-JOURNAL_MAX).join('\n')}\n`);
+}
+
+const RANK: Record<string, number> = { ALLOW: 0, REVIEW: 1, BLOCK: 2 };
+const ago = (iso: string) => {
+  const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
+};
 
 function git(cwd: string): GitFacts | undefined {
   const run = (...args: string[]) => {
@@ -90,6 +120,7 @@ function deps(cfg: ReturnType<typeof loadConfig>): HookDeps {
       mkdirSync(veraHome(), { recursive: true });
       appendFileSync(degradedQueuePath(), `${JSON.stringify(event)}\n`);
     },
+    journal: appendJournal,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     now: () => Date.now(),
     log: (line) => process.stderr.write(`${line}\n`),
@@ -172,6 +203,61 @@ switch (command) {
       : 0;
     console.log(
       `config     ${configPath()}\nendpoint   ${cfg.endpoint}\norg        ${cfg.org}\naud        ${cfg.aud}\nacting_for ${cfg.actingFor ?? '(none)'}\nhold       ${cfg.holdSeconds}s → ${cfg.onHoldExpiry}\nqueued degraded events: ${q}${q ? ` (${join(veraHome(), 'degraded-queue.jsonl')})` : ''}`,
+    );
+    break;
+  }
+  case 'recent': {
+    const { values } = parseArgs({ args: rest, options: { n: { type: 'string' } } });
+    const n = Math.max(1, Number(values.n ?? 10));
+    const entries = readJournal().slice(-n).reverse();
+    if (entries.length === 0) {
+      console.log(`no decisions journaled yet (${journalPath()})`);
+      break;
+    }
+    for (const e of entries) {
+      console.log(
+        `${e.decision_id}  ${e.verdict.padEnd(6)}  ${ago(e.at).padStart(7)}  ${e.class.padEnd(18)}  ${e.program}`,
+      );
+    }
+    break;
+  }
+  case 'wrong': {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      options: { should: { type: 'string' }, why: { type: 'string' } },
+      allowPositionals: true,
+    });
+    const should = values.should?.toUpperCase();
+    if (!should || !(should in RANK)) {
+      console.error(`--should must be ALLOW, REVIEW or BLOCK\n\n${usage}`);
+      process.exit(2);
+    }
+    const ref = positionals[0] ?? 'last';
+    const journal = readJournal();
+    const entry = ref === 'last' ? journal.at(-1) : journal.find((e) => e.decision_id === ref);
+    if (!entry) {
+      console.error(
+        ref === 'last' ? `nothing in the journal yet (${journalPath()})` : `${ref} is not in the local journal; run \`vera-hook recent\``,
+      );
+      process.exit(1);
+    }
+    if (entry.verdict === should) {
+      console.error(`${entry.decision_id} was already ${should} — that is not a wrong verdict`);
+      process.exit(1);
+    }
+    // Looser than a human wanted is a false negative; stricter is a false positive. The distinction is
+    // the whole point of the report: one false negative is a policy gap, ten false positives are fatigue.
+    const kind = RANK[should]! > RANK[entry.verdict]! ? 'false_negative' : 'false_positive';
+    const cfg = loadConfig();
+    await deps(cfg).client.outcome(entry.decision_id, kind, {
+      should_have_been: should,
+      decided: entry.verdict,
+      note: values.why ?? null,
+      class: entry.class,
+      program: entry.program,
+    });
+    console.log(
+      `recorded ${kind.replace('_', ' ')}: ${entry.decision_id} was ${entry.verdict}, should have been ${should}${values.why ? ` — ${values.why}` : ''}`,
     );
     break;
   }

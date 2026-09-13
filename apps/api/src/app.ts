@@ -39,7 +39,7 @@ import {
 } from './baselines.js';
 import { conflict, forbidden, HttpError, notFound } from './errors.js';
 import { listKeys, revokeKey, rotateKey, signingParity } from './keys.js';
-import { baselineExplain, policyPrecision } from './reports.js';
+import { baselineExplain, policyPrecision, wrongVerdicts } from './reports.js';
 import {
   activePolicySet,
   issueAndRecordToken,
@@ -688,7 +688,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // ---------- POST /v1/decisions/:id/outcome (adapter-reported: asserted) ----------
   const OutcomeBody = z.object({
-    kind: z.enum(['executed', 'failed', 'reverted', 'incident', 'false_positive', 'hash_mismatch']),
+    kind: z.enum([
+      'executed',
+      'failed',
+      'reverted',
+      'incident',
+      'false_positive',
+      'false_negative',
+      'hash_mismatch',
+    ]),
     data: z.record(z.string(), z.unknown()).default({}),
   });
   app.post(
@@ -1139,6 +1147,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     async (req) => {
       const reviewer = req.reviewer!;
       return vera.withTenant(reviewer.orgId, (tx) => policyPrecision(tx, reviewer.orgId, req.query.days));
+    },
+  );
+
+  // ---------- GET /v1/reports/wrong-verdicts (reviewer session) — the dogfood loop ----------
+  app.get(
+    '/v1/reports/wrong-verdicts',
+    {
+      onRequest: requireReviewer(vera),
+      schema: { querystring: z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }) },
+    },
+    async (req) => {
+      const reviewer = req.reviewer!;
+      return vera.withTenant(reviewer.orgId, (tx) => wrongVerdicts(tx, reviewer.orgId, req.query.days));
     },
   );
 

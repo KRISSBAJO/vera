@@ -46,7 +46,33 @@ export interface DegradedEvent {
   reason: string;
 }
 
+/**
+ * One line per decision in ~/.vera/decisions.jsonl. Enough to recognise "the kubectl thing a minute
+ * ago" and nothing more: the program name, never its arguments — a journal on the developer's disk
+ * must not be a second, unredacted copy of every command an agent tried to run.
+ */
+export interface JournalEntry {
+  at: string;
+  decision_id: string;
+  verdict: 'ALLOW' | 'REVIEW' | 'BLOCK';
+  answered: HookState['answered'];
+  class: string;
+  tool: string;
+  /** e.g. `git`, `kubectl`, `psql` — the first token of a shell command; the tool name otherwise. */
+  program: string;
+}
+
+export function programOf(toolName: string, toolInput: Record<string, unknown>): string {
+  const cmd = typeof toolInput.command === 'string' ? toolInput.command.trim() : '';
+  if (!cmd) return toolName;
+  const first = cmd.split(/\s+/)[0] ?? toolName;
+  // `FOO=bar cmd` — skip leading assignments so the journal says `psql`, not `PGPASSWORD=…`.
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(first) ? (cmd.split(/\s+/).find((t) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) ?? toolName) : first;
+}
+
 export interface HookDeps {
+  /** Append to the local decision journal. Optional: tests and embedders may not want a file. */
+  journal?: (entry: JournalEntry) => Promise<void>;
   client: VeraClient;
   /**
    * The tenant-signed class and fail-mode tables (SR-07). Absent means the adapter falls back to its
@@ -123,14 +149,35 @@ export async function runPre(
   });
   const hash = hashOf(c, input.tool_name);
   const request = buildRequest(input, c, cfg);
-  const remember = (decision: HookState['decision'], answered: HookState['answered'], decisionId = '-') =>
-    deps.state.save(input.tool_use_id, {
+  const remember = async (
+    decision: HookState['decision'],
+    answered: HookState['answered'],
+    decisionId = '-',
+  ) => {
+    await deps.state.save(input.tool_use_id, {
       decision_id: decisionId,
       action_hash: hash,
       decision,
       class: c.class,
       answered,
     });
+    // Only decisions VERA actually made are journaled; degraded-mode answers have their own queue.
+    if (decisionId !== '-' && decision !== 'DEGRADED' && deps.journal) {
+      try {
+        await deps.journal({
+          at: new Date(deps.now()).toISOString(),
+          decision_id: decisionId,
+          verdict: decision,
+          answered,
+          class: c.class,
+          tool: input.tool_name,
+          program: programOf(input.tool_name, input.tool_input),
+        });
+      } catch {
+        // the journal is a convenience; it must never change a decision
+      }
+    }
+  };
 
   let res: Awaited<ReturnType<VeraClient['decide']>>;
   try {

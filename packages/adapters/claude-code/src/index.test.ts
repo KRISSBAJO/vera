@@ -12,6 +12,8 @@ import {
   runPost,
   runPre,
   VeraClient,
+  type JournalEntry,
+  programOf,
 } from './index.js';
 
 const appUrl = process.env.DATABASE_URL ?? 'postgres://vera_app:vera_app@localhost:55432/vera';
@@ -329,5 +331,50 @@ describe('SR-08 degraded mode (VERA unreachable)', () => {
     const out = await runPre(pre('Bash', { command: 'git push origin feature/x' }), bad, deps);
     expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
     expect(out.hookSpecificOutput.permissionDecisionReason).toContain('API_KEY_REQUIRED');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('the decision journal (dogfood loop)', () => {
+  it('records every decision VERA made — program name only, never the arguments', async () => {
+    const entries: JournalEntry[] = [];
+    const deps = makeDeps({ journal: async (e) => void entries.push(e) });
+    const secret = ['hunter', '2', 'abc'].join('');
+    await runPre(pre('Bash', { command: `PGPASSWORD=${secret} psql -h prod -c "SELECT 1"` }), cfg, deps);
+    await runPre(pre('Bash', { command: 'git push origin feature/journal' }), cfg, deps);
+
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ tool: 'Bash', program: 'psql' });
+    expect(entries[1]).toMatchObject({ tool: 'Bash', program: 'git', verdict: 'ALLOW', answered: 'allow' });
+    for (const e of entries) {
+      expect(e.decision_id).toMatch(/^dec_/);
+      expect(JSON.stringify(e)).not.toContain(secret);
+      expect(JSON.stringify(e)).not.toContain('SELECT');
+    }
+  });
+
+  it('does not journal degraded-mode answers — those were not VERA decisions', async () => {
+    const entries: JournalEntry[] = [];
+    const deps = makeDeps({ endpoint: 'http://127.0.0.1:1', journal: async (e) => void entries.push(e) });
+    await runPre(pre('Read', { file_path: '/tmp/x' }), cfg, deps);
+    expect(deps.degraded).toHaveLength(1);
+    expect(entries).toHaveLength(0);
+  });
+
+  it('a journal that throws never changes the decision', async () => {
+    const deps = makeDeps({
+      journal: async () => {
+        throw new Error('disk full');
+      },
+    });
+    const out = await runPre(pre('Bash', { command: 'git push origin feature/journal-2' }), cfg, deps);
+    expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
+  });
+
+  it('programOf skips leading env assignments and falls back to the tool name', () => {
+    expect(programOf('Bash', { command: 'FOO=1 BAR=2 kubectl apply -f x' })).toBe('kubectl');
+    expect(programOf('Bash', { command: '  git   push' })).toBe('git');
+    expect(programOf('Bash', { command: 'ONLY=assignment' })).toBe('Bash');
+    expect(programOf('Write', { file_path: '/x' })).toBe('Write');
   });
 });

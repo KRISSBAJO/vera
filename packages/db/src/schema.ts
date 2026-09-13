@@ -316,7 +316,9 @@ export const outcomes = pgTable('outcomes', {
   source: text('source').notNull(),
   trust: text('trust', { enum: ['verified', 'asserted'] }).notNull(),
   kind: text('kind', {
-    enum: ['executed', 'failed', 'reverted', 'incident', 'false_positive', 'hash_mismatch'],
+    // false_positive: VERA was stricter than a human says it should have been.
+    // false_negative: VERA was looser — it let through something that wanted a human. The dangerous one.
+    enum: ['executed', 'failed', 'reverted', 'incident', 'false_positive', 'false_negative', 'hash_mismatch'],
   }).notNull(),
   data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: createdAt(),

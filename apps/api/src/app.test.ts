@@ -328,3 +328,73 @@ describe('SR-16 audit', () => {
     ).toBe(401);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('wrong verdicts (the dogfood loop)', () => {
+  const report = async () =>
+    (await app.inject({ method: 'GET', url: '/v1/reports/wrong-verdicts?days=1', headers: asKey(ops.reviewerToken) })).json();
+
+  it('a false negative outranks any number of false positives', async () => {
+    // Two REVIEWs a human found tiresome, one ALLOW a human wanted to see.
+    const tiresome = async () =>
+      (
+        await decide(
+          request({
+            target: { kind: 'database', id: 'prod-postgres', environment: 'production' },
+            action: {
+              type: 'tool_call',
+              tool: 'Bash',
+              class: 'db.ddl',
+              arguments: { command: 'psql -c "ALTER TABLE t ADD COLUMN c int"' },
+              environment: 'production',
+            },
+          }),
+        )
+      ).json();
+    const a = await tiresome();
+    const b = await tiresome();
+    const c = (await decide(request())).json(); // feature-branch push → ALLOW
+    expect([a.decision, b.decision, c.decision]).toEqual(['REVIEW', 'REVIEW', 'ALLOW']);
+
+    const mark = (id: string, kind: string, should: string, note: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/decisions/${id}/outcome`,
+        headers: asKey(boot.apiKey),
+        payload: { kind, data: { should_have_been: should, note } },
+      });
+    expect((await mark(a.decision_id, 'false_positive', 'ALLOW', 'additive column, reviewed in PR')).statusCode).toBe(200);
+    expect((await mark(b.decision_id, 'false_positive', 'ALLOW', 'same')).statusCode).toBe(200);
+    expect((await mark(c.decision_id, 'false_negative', 'REVIEW', 'this branch deploys to a preview env')).statusCode).toBe(200);
+
+    const r = await report();
+    expect(r.total).toBe(3);
+    expect(r.false_positives).toBe(2);
+    expect(r.false_negatives).toBe(1);
+    expect(r.by_transition).toEqual({ 'REVIEW→ALLOW': 2, 'ALLOW→REVIEW': 1 });
+    // Newest first, and the false negative carries its note.
+    expect(r.items[0]).toMatchObject({ direction: 'false_negative', decided: 'ALLOW', should_have_been: 'REVIEW' });
+    expect(r.items[0].note).toContain('preview env');
+    // The policy behind the two false positives is named, so someone knows what to loosen.
+    expect(r.policies.map((p: { policy_id: string }) => p.policy_id)).toContain('prod-ddl-requires-review');
+    // Ranking: whatever sat on the false negative sorts above the tiresome pair, regardless of count.
+    expect(r.codes[0].false_negatives).toBe(1);
+  });
+
+  it('an entry without a target verdict is ignored rather than guessed at', async () => {
+    const d = (await decide(request())).json();
+    await app.inject({
+      method: 'POST',
+      url: `/v1/decisions/${d.decision_id}/outcome`,
+      headers: asKey(boot.apiKey),
+      payload: { kind: 'false_positive', data: { note: 'meh' } },
+    });
+    const r = await report();
+    expect(r.items.map((i: { decision_id: string }) => i.decision_id)).not.toContain(d.decision_id);
+  });
+
+  it('an API key cannot read the report — it is a reviewer view', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/reports/wrong-verdicts', headers: asKey(boot.apiKey) });
+    expect(res.statusCode).toBe(401);
+  });
+});

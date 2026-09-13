@@ -28,6 +28,8 @@ export const configPath = () => process.env.VERA_CONFIG ?? join(veraHome(), 'con
 export const statePath = (toolUseId: string) =>
   join(veraHome(), 'state', `${toolUseId.replace(/[^\w.-]/g, '_')}.json`);
 export const degradedQueuePath = () => join(veraHome(), 'degraded-queue.jsonl');
+/** Recent decisions, so `vera-hook wrong last` has something to point at. No argument values are stored. */
+export const journalPath = () => join(veraHome(), 'decisions.jsonl');
 
 export function loadConfig(): AdapterConfig {
   const path = configPath();

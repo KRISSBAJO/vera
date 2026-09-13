@@ -90,7 +90,7 @@ export class VeraClient {
 
   async outcome(
     id: string,
-    kind: 'executed' | 'failed' | 'hash_mismatch',
+    kind: 'executed' | 'failed' | 'hash_mismatch' | 'false_positive' | 'false_negative',
     data: Record<string, unknown> = {},
   ): Promise<void> {
     await this.call('POST', `/v1/decisions/${encodeURIComponent(id)}/outcome`, { kind, data });
