@@ -29,7 +29,7 @@ declare module 'fastify' {
   }
 }
 
-function bearer(req: FastifyRequest): string | undefined {
+export function bearer(req: FastifyRequest): string | undefined {
   const h = req.headers.authorization;
   if (!h?.startsWith('Bearer ')) return undefined;
   return h.slice(7).trim();

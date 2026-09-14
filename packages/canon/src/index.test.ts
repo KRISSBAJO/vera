@@ -280,3 +280,88 @@ describe('T03 commandEffect — does this command plainly do something?', () => 
     expect(unknown).toEqual({ consequential: false, signals: [] });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('commandEffect — second pass (Phase 8)', () => {
+  const consequential: [string, string][] = [
+    ['prisma migrate deploy', 'schema migration'],
+    ['npx drizzle-kit push', 'schema migration'],
+    ['alembic upgrade head', 'schema migration'],
+    ['bundle exec rails db:migrate', 'schema migration'],
+    ['aws s3 rm s3://bucket/prefix --recursive', 'cloud resource removal'],
+    ['aws ec2 terminate-instances --instance-ids i-1', 'cloud resource removal'],
+    ['gcloud compute instances delete web-1', 'cloud resource removal'],
+    ['az group delete --name rg', 'cloud resource removal'],
+    ["python -c 'import shutil; shutil.rmtree(\"/data\")'", 'destructive one-liner'],
+    ['node -e "require(\'fs\').rmSync(\'/data\',{recursive:true})"', 'destructive one-liner'],
+    ['docker system prune -af', 'container or image removal'],
+    ['docker compose down -v', 'container or image removal'],
+    ['git branch -D feature/x', 'branch or tag deletion'],
+    ['git push origin --delete feature/x', 'branch or tag deletion'],
+    ['git push origin :feature/x', 'branch or tag deletion'],
+    ['npm unpublish @vera/canon@0.1.0', 'package unpublish'],
+    ['aws kms delete-alias --alias-name alias/vera', 'secret or key material change'],
+    ['gh secret set NPM_TOKEN', 'secret or key material change'],
+  ];
+  it.each(consequential)('%s → consequential (%s)', (cmd, signal) => {
+    const e = commandEffect(cmd);
+    expect(e.consequential).toBe(true);
+    expect(e.signals).toContain(signal);
+  });
+
+  // The other direction still matters: it must not fire on the reads that fill a normal day, or every
+  // `file.read` becomes a REVIEW and the dogfood fortnight measures nothing but fatigue.
+  const benign = [
+    'prisma studio',
+    'alembic current',
+    'aws s3 ls s3://bucket',
+    'aws ec2 describe-instances',
+    'gcloud compute instances list',
+    'python -c "print(1+1)"',
+    'node -e "console.log(process.version)"',
+    'docker ps -a',
+    'docker compose ps',
+    'git branch --list',
+    'git tag --list',
+    'npm view @vera/canon versions',
+    'gh secret list',
+    'aws kms describe-key --key-id x',
+  ];
+  it.each(benign)('%s → not flagged', (cmd) => {
+    expect(commandEffect(cmd).consequential).toBe(false);
+  });
+});
+
+describe('actionHash — relabelling is always visible (property)', () => {
+  // Class evasion (T03) is caught server-side by commandEffect, but the hash is the last line: a
+  // token issued for `file.read` must never verify for the same arguments under a different class,
+  // environment, or tool. For any arguments at all, changing any one of those changes the hash.
+  const base = { tool: 'Bash', class: 'file.read', environment: 'development' as const };
+  const argsArb = fc.dictionary(fc.string({ minLength: 1, maxLength: 12 }), fc.string({ maxLength: 40 }), {
+    maxKeys: 6,
+  });
+  it('class', () => {
+    fc.assert(
+      fc.property(argsArb, fc.constantFrom('vcs.push', 'db.ddl', 'deploy.production', 'shell.exec'), (args, cls) => {
+        return actionHash({ ...base, arguments: args }) !== actionHash({ ...base, class: cls, arguments: args });
+      }),
+      { numRuns: 200 },
+    );
+  });
+  it('environment', () => {
+    fc.assert(
+      fc.property(argsArb, fc.constantFrom('staging', 'production'), (args, env) => {
+        return actionHash({ ...base, arguments: args }) !== actionHash({ ...base, environment: env, arguments: args });
+      }),
+      { numRuns: 200 },
+    );
+  });
+  it('tool', () => {
+    fc.assert(
+      fc.property(argsArb, fc.constantFrom('Write', 'Edit', 'deploy'), (args, tool) => {
+        return actionHash({ ...base, arguments: args }) !== actionHash({ ...base, tool, arguments: args });
+      }),
+      { numRuns: 200 },
+    );
+  });
+});

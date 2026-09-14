@@ -413,3 +413,61 @@ describe('the attacker wants another tenant’s data', () => {
     expect(ids).not.toContain(victim.orgId);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('the attacker wants to flood the review queue', () => {
+  // A separate app on the same database with a tiny limit, so the test is six requests, not 121.
+  let small: FastifyInstance;
+  beforeAll(async () => {
+    small = await buildApp({ vera, masterKey, publicUrl: 'http://vera.test', rateLimit: { decidePerMinute: 5 } });
+  });
+  afterAll(async () => {
+    await small.close();
+  });
+
+  const hit = (token: string) =>
+    small.inject({
+      method: 'POST',
+      url: '/v1/decide',
+      headers: asKey(token),
+      payload: forge({ action: { arguments: { command: `git push origin feature/flood-${n}` } } }),
+    });
+
+  it('the sixth decide in a minute from one key is refused, with a retry hint and no decision', async () => {
+    const codes: number[] = [];
+    for (let i = 0; i < 6; i += 1) codes.push((await hit(victim.apiKey)).statusCode);
+    expect(codes.slice(0, 5).every((c) => c === 200)).toBe(true);
+    const last = await hit(victim.apiKey);
+    expect(last.statusCode).toBe(429);
+    expect(last.json().error.code).toBe('RATE_LIMITED');
+    expect(last.json().error.message).toMatch(/retry after \d+s/);
+    expect(last.json()).not.toHaveProperty('decision');
+  });
+
+  it('a different tenant’s key is not slowed down by the flood', async () => {
+    expect((await hit(other.apiKey)).statusCode).toBe(200);
+  });
+
+  it('the limit follows the credential, not the address — the same key from a "new" IP is still refused', async () => {
+    const res = await small.inject({
+      method: 'POST',
+      url: '/v1/decide',
+      headers: { ...asKey(victim.apiKey), 'x-forwarded-for': '203.0.113.7' },
+      remoteAddress: '203.0.113.7',
+      payload: forge({ action: { arguments: { command: 'git push origin feature/flood-ip' } } }),
+    });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it('an unauthenticated prober is limited too, and never learns the request schema', async () => {
+    let last = 0;
+    for (let i = 0; i < 7; i += 1) {
+      const r = await small.inject({ method: 'POST', url: '/v1/decide', payload: { junk: true } });
+      last = r.statusCode;
+      if (r.statusCode === 401) expect(r.json().error.code).toBe('API_KEY_REQUIRED');
+    }
+    // Either it ran out of budget (429) or it is still being told to authenticate (401) — never 400
+    // with a validation message, which would describe the schema to someone without a key.
+    expect([401, 429]).toContain(last);
+  });
+});

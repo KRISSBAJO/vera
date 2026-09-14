@@ -149,6 +149,29 @@ const CONSEQUENTIAL_PATTERNS: ReadonlyArray<[string, RegExp]> = [
   ['piped remote execution', /\b(curl|wget)\b[^|]*\|\s*(sh|bash|zsh|python\d?|node|perl)\b/],
   ['output redirection to a file', /[^>]>>?\s*\/?[\w./-]+/],
   ['process termination', /(^|[\s;&|])(kill|pkill|killall)\s/],
+  // Second pass (Phase 8): the shapes the first dogfood fortnight is likely to meet.
+  [
+    'schema migration',
+    /\b(prisma\s+(migrate|db\s+push)|drizzle-kit\s+(push|migrate)|alembic\s+(upgrade|downgrade)|rails\s+db:(migrate|drop|reset|rollback)|knex\s+migrate|flyway\s+(migrate|clean)|liquibase\s+(update|rollback))\b/,
+  ],
+  [
+    'cloud resource removal',
+    /\baws\s+s3\s+(rm|rb)\b|\baws\s+[\w-]+\s+(terminate|delete|remove|deregister)[\w-]*\b|\b(gcloud|az)\s+[\w\s-]*\b(delete|destroy)\b/,
+  ],
+  [
+    'destructive one-liner',
+    /\b(python\d?|node|ruby|perl)\s+-[ce]\b.*\b(rmtree|os\.remove|os\.unlink|fs\.rm|fs\.unlink|rmSync|unlinkSync|rimraf|FileUtils\.rm|unlink\(|drop\s+table|truncate)\b/i,
+  ],
+  [
+    'container or image removal',
+    /\bdocker\s+(rm|rmi|system\s+prune|volume\s+(rm|prune)|container\s+(rm|prune)|image\s+(rm|prune))\b|\bdocker\s+compose\s+down\s+.*(-v|--volumes)\b/,
+  ],
+  ['branch or tag deletion', /\bgit\s+(branch\s+(-[dD]|--delete)|tag\s+(-d|--delete)|push\s+\S+\s+(--delete|:\S))/],
+  ['package unpublish', /\b(npm|pnpm|yarn)\s+unpublish\b|\bcargo\s+yank\b|\bgem\s+yank\b/],
+  [
+    'secret or key material change',
+    /\b(aws\s+(iam|kms|secretsmanager)\s+(create|delete|update|put|rotate)[\w-]*|gh\s+secret\s+(set|delete|remove)|vault\s+(kv\s+)?(put|delete|destroy))\b/,
+  ],
 ];
 
 export function commandEffect(command: string): CommandEffect {

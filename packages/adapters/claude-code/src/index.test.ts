@@ -375,6 +375,13 @@ describe('the decision journal (dogfood loop)', () => {
     expect(programOf('Bash', { command: 'FOO=1 BAR=2 kubectl apply -f x' })).toBe('kubectl');
     expect(programOf('Bash', { command: '  git   push' })).toBe('git');
     expect(programOf('Bash', { command: 'ONLY=assignment' })).toBe('Bash');
+    // Compound and wrapped commands: the journal names what a human would call it.
+    expect(programOf('Bash', { command: 'for f in a b; do cat "$f"; done' })).toBe('cat');
+    expect(programOf('Bash', { command: 'cd /repo && git push origin main' })).toBe('git');
+    expect(programOf('Bash', { command: 'sudo systemctl restart nginx' })).toBe('systemctl');
+    expect(programOf('Bash', { command: 'echo "x" | psql -h prod' })).toBe('psql');
+    expect(programOf('Bash', { command: '/usr/local/bin/kubectl apply -f x' })).toBe('kubectl');
+    expect(programOf('Bash', { command: 'if [ -f x ]; then rm x; fi' })).toBe('rm');
     expect(programOf('Write', { file_path: '/x' })).toBe('Write');
   });
 });

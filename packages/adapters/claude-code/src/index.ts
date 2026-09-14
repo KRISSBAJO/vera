@@ -62,12 +62,45 @@ export interface JournalEntry {
   program: string;
 }
 
+/**
+ * Shell words that are never the program a human would recognise a command by.
+ *
+ * Two kinds. A segment that *opens* with one of SKIP_SEGMENT is uninteresting as a whole (`for f in
+ * a b` names a variable, not a program; `cd /repo` names a directory; `echo "x"` names its text).
+ * SKIP_TOKEN words are prefixes to look past inside a segment (`do cat`, `sudo systemctl`).
+ */
+const SKIP_SEGMENT = new Set([
+  'for', 'while', 'until', 'if', 'elif', 'case', 'select',
+  'cd', 'pushd', 'popd', 'export', 'set', 'unset', 'source', '.', 'echo', 'printf', 'test', '[', '[[',
+  'true', 'false', 'read', 'local', 'declare', 'typeset', 'let', 'return', 'exit', 'break', 'continue',
+]);
+const SKIP_TOKEN = new Set([
+  'do', 'done', 'then', 'else', 'fi', 'esac', 'in',
+  'time', 'sudo', 'doas', 'env', 'nohup', 'exec', 'command', 'builtin', 'eval', 'nice', 'ionice',
+  'sh', 'bash', 'zsh', 'dash', '-c',
+]);
+
+const clean = (raw: string) => raw.replace(/^[\s"'`]+|[\s"'`]+$/g, '');
+const isAssignment = (t: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(t);
+
 export function programOf(toolName: string, toolInput: Record<string, unknown>): string {
   const cmd = typeof toolInput.command === 'string' ? toolInput.command.trim() : '';
   if (!cmd) return toolName;
-  const first = cmd.split(/\s+/)[0] ?? toolName;
-  // `FOO=bar cmd` — skip leading assignments so the journal says `psql`, not `PGPASSWORD=…`.
-  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(first) ? (cmd.split(/\s+/).find((t) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) ?? toolName) : first;
+  // A journal entry that says `for` or `f` tells nobody which command it was; `kubectl` does.
+  for (const segment of cmd.split(/\s*(?:;|&&|\|\||\||&|\(|\)|\n)\s*/)) {
+    const tokens = segment.split(/\s+/).map(clean).filter(Boolean);
+    // Leading assignments (`PGPASSWORD=…`) do not decide what kind of segment this is.
+    let i = 0;
+    while (i < tokens.length && isAssignment(tokens[i] as string)) i += 1;
+    const head = tokens[i];
+    if (!head || SKIP_SEGMENT.has(head)) continue;
+    for (const t of tokens.slice(i)) {
+      if (SKIP_TOKEN.has(t) || isAssignment(t) || t.startsWith('-') || t.startsWith('$')) continue;
+      if (SKIP_SEGMENT.has(t)) break; // e.g. `sudo cd /x` — nothing to name here
+      return t.split('/').at(-1) ?? t;
+    }
+  }
+  return toolName;
 }
 
 export interface HookDeps {

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import { evaluateBaselines, localParts, magnitudeOf } from '@vera/baseline-engine';
 import { actionHash } from '@vera/canon';
@@ -29,7 +30,7 @@ import {
 import { decodeJwt } from 'jose';
 import { z } from 'zod';
 import { getAdapterConfig, setAdapterConfig, signAdapterConfig } from './adapter-config.js';
-import { requireApiKey, requireReviewer } from './auth.js';
+import { bearer, requireApiKey, requireReviewer } from './auth.js';
 import {
   lookupBaselines,
   rebuildSnapshot,
@@ -37,7 +38,7 @@ import {
   recordObservation,
   retractObservation,
 } from './baselines.js';
-import { conflict, forbidden, HttpError, notFound } from './errors.js';
+import { conflict, forbidden, HttpError, notFound, tooManyRequests } from './errors.js';
 import { listKeys, revokeKey, rotateKey, signingParity } from './keys.js';
 import { baselineExplain, policyPrecision, wrongVerdicts } from './reports.js';
 import {
@@ -61,7 +62,17 @@ const {
   auditEvents,
 } = schema;
 
+export interface RateLimits {
+  /** POST /v1/decide per API key per minute. Default 120: a busy agent, not a flood. */
+  decidePerMinute?: number;
+  /** POST /v1/tokens/consume per key per minute. Higher: one decide can be consumed once, but retries happen. */
+  consumePerMinute?: number;
+  /** approve / reject per reviewer session per minute. A human does not click sixty times a minute. */
+  reviewPerMinute?: number;
+}
+
 export interface AppDeps extends ServiceContext {
+  rateLimit?: RateLimits | undefined;
   vera: VeraDb;
   logger?: boolean;
   /** Evidence providers (Proof engine). Each runs under `evidenceBudgetMs`; late ones are EVIDENCE.MISSING. */
@@ -153,6 +164,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: deps.logger ?? false }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+  // Rate limits (Phase 8). The hostile-client suite showed a single API key can ask for as many
+  // decisions as it likes; every REVIEW lands in a human's queue, so unbounded decides are a
+  // review-flood. Keyed by a hash of the bearer credential — never the credential itself, and never
+  // the IP alone, or one key could spam from many addresses while an office NAT got punished for
+  // one bad neighbour. Unauthenticated requests fall back to the IP. Opt-in per route: reads of
+  // JWKS and OpenAPI are cheap and public.
+  const limits = { decidePerMinute: 120, consumePerMinute: 240, reviewPerMinute: 60, ...deps.rateLimit };
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (req) => {
+      const token = bearer(req);
+      return token ? `tok:${createHash('sha256').update(token).digest('hex').slice(0, 32)}` : `ip:${req.ip}`;
+    },
+    // The plugin throws whatever this returns, verbatim. Returning the app's own HttpError means the
+    // one error handler below shapes it like every other refusal — a plain object here would fall
+    // through to the 500 branch, and a client told "internal error" retries harder, not softer.
+    errorResponseBuilder: (_req, ctx) =>
+      tooManyRequests(
+        `rate limit exceeded: ${ctx.max} per ${ctx.after}; retry after ${Math.ceil(ctx.ttl / 1000)}s`,
+      ),
+    onExceeded: (req, key) => {
+      req.log.warn({ limit_key: key, url: req.url }, 'rate limit exceeded');
+    },
+  });
+  const perMinute = (max: number) => ({ rateLimit: { max, timeWindow: '1 minute' } });
+
   await app.register(swagger, {
     openapi: {
       info: {
@@ -197,8 +234,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post(
     '/v1/decide',
     {
+      config: perMinute(limits.decidePerMinute),
       onRequest: requireApiKey(vera),
-      schema: { body: DecideRequestSchema, response: { 200: DecideResponseSchema, 409: ErrorSchema } },
+      schema: { body: DecideRequestSchema, response: { 200: DecideResponseSchema, 409: ErrorSchema, 429: ErrorSchema } },
     },
     async (req) => {
       const key = req.key!;
@@ -503,11 +541,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.post(
       `/v1/decisions/:id/${verdict}`,
       {
+        config: perMinute(limits.reviewPerMinute),
         onRequest: requireReviewer(vera),
         schema: {
           params: z.object({ id: z.string() }),
           body: ReviewBody,
-          response: { 200: ReviewResult, 403: ErrorSchema },
+          response: { 200: ReviewResult, 403: ErrorSchema, 429: ErrorSchema },
         },
       },
       async (req) => {
@@ -638,10 +677,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post(
     '/v1/tokens/consume',
     {
+      config: perMinute(limits.consumePerMinute),
       onRequest: requireApiKey(vera),
       schema: {
         body: ConsumeBody,
-        response: { 200: z.object({ consumed: z.literal(true), jti: z.string() }), 409: ErrorSchema },
+        response: { 200: z.object({ consumed: z.literal(true), jti: z.string() }), 409: ErrorSchema, 429: ErrorSchema },
       },
     },
     async (req) => {
