@@ -122,6 +122,7 @@ Format: **ID — title.** Attack → impact → mitigations (V1 required unless 
 - Step-up re-authentication for approvals on `sensitivity: high` targets; approvals show a "you have approved N from this actor in the last hour" banner.
 - The product's own goal (fewer, better REVIEWs) is the long-term mitigation; measure it (§17 metrics).
 - Test: 30 REVIEWs from one actor in 10 minutes → the 31st routes with quorum 2.
+- **Implemented (Phase 8):** `/v1/decide`, `/v1/tokens/consume`, approve and reject are rate-limited per credential — keyed by a hash of the bearer token, never the IP alone, so one key cannot flood from many addresses and an office NAT is not punished for one bad neighbour. Defaults: 120 decides, 240 consumes, 60 reviews per minute. The hostile-client suite floods it (`hostile.test.ts › the attacker wants to flood the review queue`).
 
 **T07 — Self-approval and SoD bypass via asserted identity.** The adapter asserts `acting_for: someone-else@…` so the real operator can approve their own action; or asserts a service account. → SoD is only as good as the identity claim. *Likelihood: high in V1 without IdP. Impact: high.*
 - `acting_for` carries a **trust level**: `verified` (from an IdP-issued token VERA validated, *later*) or `asserted` (adapter claim). SoD exclusion applies to **both** the asserted identity *and the API key's owning principal**; if the key is a shared team key, routing requires quorum ≥ 2 for consequential classes.
@@ -214,6 +215,7 @@ Format: **ID — title.** Attack → impact → mitigations (V1 required unless 
 **T25 — VERA as a denial-of-service on the customer.** VERA outage, or per-tenant rate limits, stall every governed agent. *Likelihood: medium. Impact: medium–high.*
 - SLO for `/decide` availability; adapter degraded mode (T12); per-tenant quotas with burst rather than hard cut-offs; rate-limit responses are distinguishable from outages so the adapter can back off instead of failing over.
 - Chaos test: API down 5 minutes → read-only work continues, consequential actions wait for a human, nothing executes unattested.
+- **Implemented (Phase 8):** limits are per credential, not per tenant, so one runaway agent cannot stall its colleagues; defaults sit well above a busy agent's rate; a limit is answered with `429 RATE_LIMITED` and a `retry after Ns` message, distinct from every outage shape, so an adapter can wait rather than fail over. Unauthenticated probing is limited by IP and is never shown the request schema.
 
 ---
 
@@ -262,6 +264,7 @@ These become acceptance tests; the ID appears in the test name.
 | SR-20 | Baselines train only on executed, non-reverted, approved actions; add severity only | T09 | attempted-but-blocked action does not change counts |
 | SR-21 | Outcomes and recommendations carry trust provenance; activation is human | T10 | asserted-only recommendation labeled |
 | SR-22 | Review-request spikes raise quorum for high sensitivity | T06 | 30-in-10-min test |
+| SR-23 | decide / consume / approve / reject are rate-limited per credential (hash of the bearer, never IP alone); 429 is distinguishable from outage | T06, T25 | hostile flood test: 6th refused with retry hint, other tenants unaffected, same key from a new IP still refused |
 
 ---
 
