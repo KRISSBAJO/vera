@@ -216,16 +216,22 @@ export async function runPre(
   try {
     res = await deps.client.decide(request);
   } catch (e) {
-    if (e instanceof VeraRejected) {
+    // A 429 is not a refusal of this action — VERA is throttling this credential (SR-23). It is
+    // handled below exactly like an outage: the signed fail-mode table decides, so read-only work
+    // may continue and consequential work asks a human. Denying here would tell the agent VERA
+    // said no to *this* action, which it did not.
+    if (e instanceof VeraRejected && e.status !== 429) {
       await remember('BLOCK', 'deny');
       return preOutput(
         'deny',
         `VERA refused the request: ${e.code}${e.message && e.message !== e.code ? ` — ${e.message}` : ''}`,
       );
     }
-    // Unreachable: the signed fail-mode table decides, not this machine's opinion (SR-08, T12).
-    // With no verified table, the built-in one applies — read-only classes only.
-    const reason = e instanceof VeraUnreachable ? e.message : String(e);
+    // Unreachable (or throttled): the signed fail-mode table decides, not this machine's opinion
+    // (SR-08, T12). With no verified table, the built-in one applies — read-only classes only.
+    const throttled = e instanceof VeraRejected;
+    const reason = throttled ? `rate limited: ${e.message}` : e instanceof VeraUnreachable ? e.message : String(e);
+    const unavailable = throttled ? 'VERA is rate-limiting this credential' : 'VERA unreachable';
     const answered = mayFailOpen(resolved.config, c.class) ? 'allow' : 'ask';
     await deps.queueDegraded({
       at: new Date(deps.now()).toISOString(),
@@ -239,11 +245,11 @@ export async function runPre(
     return answered === 'allow'
       ? preOutput(
           'allow',
-          `VERA unreachable (${reason}); ${c.class} may fail open per the ${resolved.source} table — allowed in degraded mode (SYSTEM.DEGRADED_MODE)`,
+          `${unavailable} (${reason}); ${c.class} may fail open per the ${resolved.source} table — allowed in degraded mode (SYSTEM.DEGRADED_MODE)`,
         )
       : preOutput(
           'ask',
-          `VERA unreachable (${reason}); ${c.class} is consequential — a human must decide (fail closed)`,
+          `${unavailable} (${reason}); ${c.class} is consequential — a human must decide (fail closed)`,
           `VERA is unreachable. This ${c.class} action was not decided by VERA.`,
         );
   }

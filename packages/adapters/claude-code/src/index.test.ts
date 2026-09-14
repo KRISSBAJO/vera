@@ -26,6 +26,7 @@ let boot: BootstrapResult;
 let ops: { userId: string; reviewerToken: string };
 let endpoint: string;
 let cfg: AdapterConfig;
+let masterKey: Buffer;
 
 const git = () => ({ remote: 'github.com/logaxp/hearken', branch: 'feature/x', defaultBranch: 'main' });
 
@@ -73,7 +74,7 @@ beforeAll(async () => {
   await admin.migrate();
   await admin.close();
   vera = createDb(appUrl, { max: 4 });
-  const masterKey = randomBytes(32);
+  masterKey = randomBytes(32);
   app = await buildApp({ vera, masterKey, publicUrl: 'http://vera.test' });
   const address = await app.listen({ port: 0, host: '127.0.0.1' });
   endpoint = address;
@@ -383,5 +384,35 @@ describe('the decision journal (dogfood loop)', () => {
     expect(programOf('Bash', { command: '/usr/local/bin/kubectl apply -f x' })).toBe('kubectl');
     expect(programOf('Bash', { command: 'if [ -f x ]; then rm x; fi' })).toBe('rm');
     expect(programOf('Write', { file_path: '/x' })).toBe('Write');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe('SR-23 rate limited (VERA says slow down)', () => {
+  it('a 429 is handled like an outage, not a refusal: read-only continues, consequential asks, both queued', async () => {
+    // A second app with a two-per-minute limit, so the third decide from this key is a real 429.
+    const small = await buildApp({ vera, masterKey, publicUrl: 'http://vera.test', rateLimit: { decidePerMinute: 2 } });
+    const smallEndpoint = await small.listen({ port: 0, host: '127.0.0.1' });
+    try {
+      const deps = makeDeps({ endpoint: smallEndpoint });
+      const c = { ...cfg, endpoint: smallEndpoint };
+      await runPre(pre('Read', { file_path: 'a' }), c, deps);
+      await runPre(pre('Read', { file_path: 'b' }), c, deps);
+      expect(deps.degraded).toHaveLength(0);
+
+      const read = await runPre(pre('Read', { file_path: 'c' }), c, deps);
+      expect(read.hookSpecificOutput.permissionDecision).toBe('allow');
+      expect(read.hookSpecificOutput.permissionDecisionReason).toMatch(/rate-limiting/);
+      expect(read.hookSpecificOutput.permissionDecisionReason).toContain('SYSTEM.DEGRADED_MODE');
+
+      const push = await runPre(pre('Bash', { command: 'git push origin feature/throttled' }), c, deps);
+      expect(push.hookSpecificOutput.permissionDecision).toBe('ask');
+      expect(push.hookSpecificOutput.permissionDecisionReason).not.toMatch(/refused/);
+
+      expect(deps.degraded).toHaveLength(2);
+      for (const d of deps.degraded as { reason: string }[]) expect(d.reason).toMatch(/rate limited/);
+    } finally {
+      await small.close();
+    }
   });
 });
